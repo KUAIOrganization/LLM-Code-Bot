@@ -32,17 +32,18 @@ def genDataset(inString: str, outString: str):
     """Given an input and the desired output, returns two lists that can be used to train a model.
     
     Assumes that the input of the model is a sequence of tokens and the output is a one-hot encoding
-    of the desired token. 
+    of the desired token. However, we use sparse categorical loss, so while the output is one-hot we can just
+    use the index in the data set.
     Ex: Input = hi, Output = world, tokens = [FILLER_TOKEN, h, i, w, o, r, l, d, TERMINATE_TOKEN], max input length = 10
     Would tokenize each to 128 and 345678.
     It adds a terminate token to the end of the output so that we have a flag to know to stop when we're interpreting its output.
     It adds one to the end of the input too because I think it's good to tell it where the question ends and its response begins.
-    The first pair it adds to the dataset would be [1, 2, 8, 0, 0, 0, 0, 0, 0, 0], [0, 0, 0, 1, 0, 0, 0, 0, 0]
-    The length of the first is 10 because that's the max input length. The length of the second is 9 because that's the number of
-    tokens. The second is the one-hot encoding of 3 because when the input is 128(hi), we want the next character to be 3(w)
-    The next pair would be [1, 2, 8, 3, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0, 0, 0, 0].
-    Now the input is 1283(hi w) and the output is the one-hot of 4(o).
-    It repeats this until finally it adds [1, 2, 8, 3, 4, 5, 6, 7, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 1]"""
+    The first pair it adds to the dataset would be [1, 2, 8, 0, 0, 0, 0, 0, 0, 0], [4]
+    The length of the first is 10 because that's the max input length. The length of the second is 1 because it's just the token.
+    The second is the one-hot encoding of 3 because when the input is 128(hi), we want the next character to be 3(w)
+    The next pair would be [1, 2, 8, 3, 0, 0, 0, 0, 0, 0], [5].
+    Now the input is 1283(hi w) and the output is the next token.
+    It repeats this until finally it adds [1, 2, 8, 3, 4, 5, 6, 7, 0, 0], [9]"""
     tokensIn = tokenizer.tokenize(inString)
     tokensOut = tokenizer.tokenize(outString)
 
@@ -62,9 +63,7 @@ def genDataset(inString: str, outString: str):
     index = len(tokensIn)
     for i in range(len(tokensOut)):
         inList.append(inBase.copy())
-        out = Numpy.zeros(TOKEN_COUNT)
-        out[tokensOut[i]] = 1
-        outList.append(out)
+        outList.append([tokensOut[i]])
         inBase[index + i] = tokensOut[i]
 
     return (inList, outList)
@@ -144,7 +143,7 @@ if __name__ == "__main__":
     # While it's training, it'll print out the accuracy of the model each epoch.
     model.compile(
         optimizer="rmsprop",
-        loss="categorical_crossentropy",
+        loss="sparse_categorical_crossentropy",
         metrics=["accuracy"])
     
     # Prints a summary describing the structure of the model.
