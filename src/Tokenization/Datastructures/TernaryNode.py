@@ -1,4 +1,8 @@
 class TernaryNode:
+    """Node for the Ternary Search Tree structure.
+    
+    Has three children: a left which has a key less than it, a right whose key is greater, and
+    a center whose key is a continuation of a string this key is patr of."""
     def __init__(self, key: str, value):
         self.key = key
         self.value = value
@@ -21,6 +25,7 @@ class TernaryNode:
         return out
 
     def _recGetAll(self, parentString: str, allList: list[str]):
+        """Recursively traverses the tree to fill a list with all the keys in the tree."""
         if self.hasLeft():
             self.left._recGetAll(parentString, allList)
         if not self.value is None:
@@ -50,6 +55,7 @@ class TernaryNode:
             self.right.doFunctionInOrder(function)
 
     def getString(self, parentString) -> str:
+        """Traverses the tree in order to produce a '||'-seperated list of keys in the tree."""
         out = ""
         if self.hasLeft():
             out += self.left.getString(parentString)

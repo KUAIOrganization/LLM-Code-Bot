@@ -60,7 +60,7 @@ class Tokenizer:
         for token in tokenList:
             if token < self._offset or token >= self._count + self._offset:
                 continue
-            out += self._tokenList[token - 1]
+            out += self._tokenList[token - self._offset]
         return out
     
     def getCount(self):

@@ -2,12 +2,21 @@ from .TernaryNode import TernaryNode
 from enum import Enum
 
 class TernarySearchTree:
+    """The Ternary Search Tree data structure.
     
+    This is very good at storing strings. Each node contains one letter in a string. It's exactly like a binary tree, except that each node 
+    has a middle child which represents a continuation of the string. For example, a tree containing 'Is', 'a', and 'A' (added in that order)
+    would have root 'I' with left child 'A', center child 's', and right child a (A < I < a). \n
+    See https://en.wikipedia.org/wiki/Ternary_search_tree\n
+    For this project, each node also has a value. This represents its integer token. Some values may be None if they are part of a longer token.
+    For example, if 'integer' is a token, only the 'r' node will contain its value. 'g' probably won't have a value because there is no reason
+    that 'integ' would be a token. However, 'n' probably would have its own value because 'in' is a common word."""
     def __init__(self):
         self.root: TernaryNode = None
-        self._size = 0
+        self._size = 0 # I don't remember how accurate this is so probably shouldn't be relied upon. If the size is needed, use len(getAll())
 
     def add(self, key: str, value):
+        """Adds the given key to the tree, with the given value."""
         index: int = 0
 
         if self.root == None:
@@ -41,12 +50,23 @@ class TernarySearchTree:
                 current = current.right
 
     class TSearchAnswer:
+        """A data class to be returned by search.
+        
+        This exists because whether an item has a child is very useful information and it is
+        helpful for it to be returned with the value. There are two reasons the value might be
+        None: 1. The given key is not in the tree, and 2. The given key is in the tree but is
+        None. To differentiate these, exists is True if the value is in the tree."""
         def __init__(self, value, hasChild: bool, exists: bool):
             self.value = value
             self.hasChild = hasChild
             self.exists = exists
 
     def search(self, key: str) -> TSearchAnswer:
+        """Searches the tree for the given key.
+        
+        Returns a TSearchAnswer. The answer's value is the value of the key (or None if it isn't in the tree).
+        hasChild is whether the key has a center child (whether there are strings that build off it in the tree)
+        exists is whether the key is in the tree."""
         index = 0
         size = len(key)
         current = self.root
@@ -69,6 +89,7 @@ class TernarySearchTree:
         raise RuntimeError("Search escaped while without returning!")
     
     def remove(self, key: str):
+        """Removes the given key from the tree."""
         index = 0
         current = self.root
         parent = current
@@ -86,15 +107,15 @@ class TernarySearchTree:
                         if current.hasRight():
                             if current.right.hasLeft():
                                 if parent.left == current:
-                                    parent.left = TernarySearchTree.extractLeast(current.right.left, current.right)
+                                    parent.left = TernarySearchTree._extractLeast(current.right.left, current.right)
                                     parent.left.left = current.left
                                     parent.left.right = current.right
                                 elif parent.center == current:
-                                    parent.center = TernarySearchTree.extractLeast(current.right.left, current.right)
+                                    parent.center = TernarySearchTree._extractLeast(current.right.left, current.right)
                                     parent.center.left = current.left
                                     parent.center.right = current.right
                                 else:
-                                    parent.right = TernarySearchTree.extractLeast(current.right.left, current.right)
+                                    parent.right = TernarySearchTree._extractLeast(current.right.left, current.right)
                                     parent.right.left = current.left
                                     parent.right.right = current.right
                             else:
@@ -126,10 +147,14 @@ class TernarySearchTree:
         raise RuntimeError("Remove escaped while without returning!")
     
     def getAll(self) -> list[str]:
+        """Returns an in-order list of all keys in the tree."""
         return self.root.getAll() if not (self.root == None) else []
     
     @staticmethod
-    def extractLeast(node : TernaryNode, parent: TernaryNode) -> TernaryNode:
+    def _extractLeast(node : TernaryNode, parent: TernaryNode) -> TernaryNode:
+        """Removes and returns the lowest node in the given node's subtree.
+        
+        Helper for remove"""
         if node.hasLeft():
             return TernarySearchTree.extractLeast(node.left, node)
         else:
@@ -139,11 +164,17 @@ class TernarySearchTree:
     
     @staticmethod
     def buildFromOrderedList(orderedList: list[str], values: list):
+        """Given a sorted list, returns a tree containing all the items contained in it.
+        
+        The values come from the given list of values. Theoretically (if I've coded it correctly) it should
+        be the shallowest tree possible. This method exists because just adding a sorted list to what is basically
+        a binary tree removes all of its preformance benefits (I was doing this at one point)."""
         out = TernarySearchTree()
         TernarySearchTree._buildingPrepper(orderedList, values, 0, out)
         return out
 
     def _buildingPrepper(orderedList: list[str], values: list, index: int, tree):
+        """Helper for buildFromOrderedList()"""
         bases: list[str] = []
         basesValues: list = []
         subs: list[list[str]] = []
@@ -175,6 +206,7 @@ class TernarySearchTree:
 
     @staticmethod
     def _buildingSplitter(orderedList: list[str], values: list, tree):
+        """Helper for buildOrderedList()"""
         if len(orderedList) == 1:
             #print(orderedList[0], values[0])
             tree.add(orderedList[0], values[0])
@@ -190,4 +222,7 @@ class TernarySearchTree:
         TernarySearchTree._buildingSplitter(orderedList[half+1:], values[half+1:], tree)
             
     def size(self):
+        """Returns the number of keys in the tree.
+        
+        May or may not be accurate. Just use len(getAll())."""
         return self._size

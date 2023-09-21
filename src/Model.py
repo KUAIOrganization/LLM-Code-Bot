@@ -25,7 +25,7 @@ TERMINATE_TOKEN = len(tokens) + 1 #The terminate token
 TOKEN_COUNT = len(tokens) + 2 #The total number of tokens (# in tokens + Filler + Terminate)
 # A Ternary search tree that contains all the token strings and their indexes. Ternary search trees are just like binary
 # ones except that each node has a middle child. They're good for storing strings. You can look them up for more info.
-tokenizer: Tokenizer = Tokenizer((tokens, [i for i in range(1, len(tokens) + 1)]))
+tokenizer: Tokenizer = Tokenizer((tokens, [i for i in range(1, len(tokens) + 1)]), startOffest=1)
 
 @staticmethod
 def genDataset(inString: str, outString: str):

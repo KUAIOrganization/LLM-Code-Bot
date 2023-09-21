@@ -1,5 +1,6 @@
 from .FibonacciNode import FibonacciNode
 class MaxFibonocciHeap:
+    """See https://en.wikipedia.org/wiki/Fibonacci_heap"""
     def __init__(self):
         self.root: FibonacciNode = None
         self.max: FibonacciNode = None
