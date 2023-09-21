@@ -2,6 +2,7 @@ import os
 import tensorflow as TensorFlow
 import tensorflow_text as TensorFlowText #NOT USED BECAUSE UNSUPPORTED ON WINDOWS
 from Tokenization.Datastructures.TernarySearchTree import TernarySearchTree
+from Tokenization.Tokenizer import Tokenizer
 import numpy as Numpy
 Keras = TensorFlow.keras
 
@@ -24,58 +25,7 @@ TERMINATE_TOKEN = len(tokens) + 1 #The terminate token
 TOKEN_COUNT = len(tokens) + 2 #The total number of tokens (# in tokens + Filler + Terminate)
 # A Ternary search tree that contains all the token strings and their indexes. Ternary search trees are just like binary
 # ones except that each node has a middle child. They're good for storing strings. You can look them up for more info.
-tree: TernarySearchTree = TernarySearchTree.buildFromOrderedList(tokens, [i for i in range(1, len(tokens) + 1)])
-
-@staticmethod
-def tokenize(string: str) -> list[int]:
-    """Tokenizes the given string using the tokens in tree.
-    
-    Turns the string into a list of integers, where each integer corresponds to a character or sequence of
-    characters. These integers can be fed into a neural network.
-    """
-    index = 0
-    out: list[int] = []
-    while index < len(string):
-        pair = getNextToken(string, tree, index)
-        if pair[0] == -1:
-            break
-        out.append(pair[0])
-        index = pair[1]
-    return out
-
-#out: [value, next index]
-@staticmethod
-def getNextToken(string: str, tree: TernarySearchTree, index: int) -> list[int]:
-    """Gets the next token in the given string, starting at the given index. Returns the token and the index after its end.
-    
-    Uses the given tree to find the next token in the given string. Searches through the tree and finds the
-    longest sequence of characters that has a token and matches the given string, and returns the token of that sequence."""
-    built = ""
-    if index + 1 == len(string):
-        return [-1, -1]
-    char = string[index]
-    index += 1
-
-    built += char
-    result = tree.search(built)
-
-    lastGoodResult = result.value
-    lastGoodFileSpot = index
-    
-    while result.hasChild:
-        if index + 1 == len(string):
-            break
-        char = string[index]
-        index += 1
-        result = tree.search(built + char)
-        if not result.exists:
-            return [lastGoodResult, lastGoodFileSpot]
-        built += char
-        if not(result.value is None):
-            lastGoodResult = result.value
-            lastGoodFileSpot = index
-    
-    return [lastGoodResult, lastGoodFileSpot]
+tokenizer: Tokenizer = Tokenizer((tokens, [i for i in range(1, len(tokens) + 1)]))
 
 @staticmethod
 def genDataset(inString: str, outString: str):
@@ -93,8 +43,8 @@ def genDataset(inString: str, outString: str):
     The next pair would be [1, 2, 8, 3, 0, 0, 0, 0, 0, 0], [0, 0, 0, 0, 1, 0, 0, 0, 0].
     Now the input is 1283(hi w) and the output is the one-hot of 4(o).
     It repeats this until finally it adds [1, 2, 8, 3, 4, 5, 6, 7, 0, 0], [0, 0, 0, 0, 0, 0, 0, 0, 1]"""
-    tokensIn = tokenize(inString)
-    tokensOut = tokenize(outString)
+    tokensIn = tokenizer.tokenize(inString)
+    tokensOut = tokenizer.tokenize(outString)
 
     tokensIn.append(TERMINATE_TOKEN)
     tokensOut.append(TERMINATE_TOKEN)
@@ -126,7 +76,7 @@ def generate(model: Keras.Model, input: str):
     Does this by giving the model the given input, getting its output (a one-hot encoding of a token),
     and then concatenating the output token onto the input. It does this until either the model outputs a TERMINATE_TOKEN,
     or the input size is greater than IN_SIZE."""
-    inputTokenized = tokenize(input)
+    inputTokenized = tokenizer.tokenize(input)
     inputTokenized.append(TERMINATE_TOKEN)
 
     inBase = [Numpy.zeros((IN_SIZE,1), dtype="int32")]
@@ -146,17 +96,7 @@ def generate(model: Keras.Model, input: str):
             print("Max size reached without end!")
             break
 
-    return detokenize(outTotal)
-
-@staticmethod
-def detokenize(tokenList: list[int]):
-    """Given a list of tokens, returns the string they represent."""
-    out = ""
-    for token in tokenList:
-        if token == FILLER_TOKEN or token == TERMINATE_TOKEN:
-            continue
-        out += tokens[token - 1]
-    return out
+    return tokenizer.detokenize(outTotal)
 
 if __name__ == "__main__":    
 
