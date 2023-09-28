@@ -1,0 +1,1 @@
+for s in[*open(0)][2::2]:a=s.split();print(*(len(a)+1-int(x)for x in a))

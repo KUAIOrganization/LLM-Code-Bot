@@ -1,0 +1,1 @@
+for zx in[*open(0)][2::2]:ml=sorted(map(int,zx.split()));print(ml[-(ml[0]>=0)])

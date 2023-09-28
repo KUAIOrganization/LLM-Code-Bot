@@ -1,0 +1,1 @@
+for s in[*open(0)][1:]:n,k,x=map(int,s.split());print((-1,(k*k-k)//2+(x-(x==k))*(n-k))[x+2>k<=n])

@@ -1,0 +1,1 @@
+print(sum(1-2*('-'in q)for q in[*open(0)][1:]))
