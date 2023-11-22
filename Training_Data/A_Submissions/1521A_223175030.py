@@ -35,7 +35,3 @@ for i in range(t):
         print(' '.join(map(str,l[i])))
     else:
         print("NO")
-    
-        
-        
-						   		 	 	  	   			   	
