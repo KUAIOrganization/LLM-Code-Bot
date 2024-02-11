@@ -8,11 +8,12 @@ import os
 import tensorflow as tf
 import pickle
 
-from Transformer import ModelArgs, Loader, Transformer, build_and_compile, load_data
+from Transformer import ModelArgs, Loader, Transformer, build_and_compile
 
 
 def main():
-    base_log_dir = os.path.join("/workspace/logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_log_dir = os.path.join(base_dir, "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
     fit_log_dir = os.path.join(base_log_dir, "fit")
     debug_log_dir = os.path.join(base_log_dir, "debug")
 
@@ -32,9 +33,9 @@ def main():
     
     # Initialize the Loader
     dataset_choice = "All" # [All, CodeForces_A_difficulty, ProblemSolutionPythonV3]
-    dataset_path = f"/workspace/Training_Dat/{dataset_choice}.npz"
+    dataset_path = os.path.join("/workspace/Training_Data", f"{dataset_choice}", "tokenized_padded_data.npz")
     loader = Loader(dataset_path, args)
-    loader.create_dataset()
+    loader.create_dataset() # Do we need this the same?  Should it be changed?
     
     # Load tokenizer information
     with open('problem_tokenizer.pkl', 'rb') as f:
@@ -74,7 +75,8 @@ def main():
     """
     
     # Save the model
-    model.save("/workspace")
+    model_dir = os.path.join(base_dir, "Transformer", "model_files")
+    model.save(model_dir)
 
 if __name__ == "__main__":
     main()

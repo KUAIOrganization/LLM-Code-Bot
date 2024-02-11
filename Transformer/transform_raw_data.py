@@ -2,6 +2,7 @@
 # coding: utf-8
 
 
+import datetime
 import json
 import os
 
@@ -13,15 +14,18 @@ import re
 from .tokenizer import Tokenizers
 
 
-class Dataset_Loaders:
-    def __init__(self):
-        base_log_dir = os.path.join("/workspace/logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
-        loader_log_dir = os.path.join(base_log_dir, "loader")
+class Dataset_Loader:
+    def __init__(self, dataset_path):
+        base_log_dir = os.path.join("/workspace/logs" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
+        
+        self.output_dir = os.path.abspath(os.path.join(dataset_path, os.path.pardir))
+        self.loader_log_dir = os.path.join(base_log_dir, "loader")
         self.tokenizer = Tokenizers()
         
     def load_CodeForces_A_difficulty(self):
         # Load problems
-        with open(self.problems_path, 'r') as problems_file:
+        problems_path = os.path.join(self.output_dir, "A_problems.json")
+        with open(problems_path, 'r') as problems_file:
             problems_list = json.load(problems_file)
         raw_problems = {}
 
@@ -37,8 +41,9 @@ class Dataset_Loaders:
             raw_problems[problem_id] = concatenated_problem
 
         # Load solutions
-        raw_solutions = [[] for _ in range(515)] # 515 python submissions
-        submissions = glob.glob(os.path.join(self.submissions_dir, "*.py"))
+        submissions_dir = os.path.join(self.output_dir, "A_submissions")
+        raw_solutions = [[] for _ in range(2000)] # Up to 2000 problem question indices
+        submissions = glob.glob(os.path.join(submissions_dir, "*.py"))
 
         for submission_path in submissions:
             problem_number = int(re.findall(r'^\d+', os.path.basename(submission_path))[0])
@@ -58,8 +63,12 @@ class Dataset_Loaders:
         problems = self.tokenizer.tokenize_input(problems)
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
         
+        # Write data to a file
+        self.write_file(problems, decoder_inputs, targets, self.output_dir)
+
     def load_ProblemSolutionPythonV3(self):
-        df = pd.read_csv(self.csv_path)
+        problems_path = os.path.join(self.output_dir, "ProblemSolutionPythonV3.csv")
+        df = pd.read_csv(problems_path)
 
         # Initialize problems and solutions lists
         problems = []
@@ -73,28 +82,55 @@ class Dataset_Loaders:
             solutions.append(solution)
 
         # Tokenize and pad
-        problems, decoder_inputs, targets = tokenizer.tokenize(problems, solutions)
+        problems = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+
+        # Write data to a file
+        output_folder = os.path.join(self.output_dir, "ProblemSolutionPythonV3")
+        self.write_file(problems, decoder_inputs, targets, self.output_dir)
+    
+    def load_All(self):
+        # Load the npz files
+        parent_dir = os.path.abspath(os.path.join(self.output_dir, os.path.pardir))
+        CodeForces_path = os.path.join(parent_dir, "CodeForces_A_difficulty", "tokenized_padded_data.npz")
+        ProblemSolutionV3_path = os.path.join(parent_dir, "ProblemSolutionPythonV3", "tokenized_padded_data.npz")
+
+        if not os.path.exists(CodeForces_path):
+            temp_parent_dir = os.path.abspath(os.path.join(self.output_dir, os.pardir))
+            self.output_dir = os.path.join(temp_parent_dir, "CodeForces_A_difficulty")
+            self.load_CodeForces_A_difficulty()
+        if not os.path.exists(ProblemSolutionV3_path):
+            temp_parent_dir = os.path.abspath(os.path.join(self.output_dir, os.pardir))
+            self.output_dir = os.path.join(temp_parent_dir, "ProblemSolutionPythonV3")
+            self.load_ProblemSolutionPythonV3()
+        
+        cf_data = np.load(CodeForces_path)
+        ps_data = np.load(ProblemSolutionV3_path)
+        
+        # Concatenate the files
+        problems = np.concatenate((cf_data['problems'], ps_data['problems']), axis=0)
+        decoder_inputs = np.concatenate((cf_data['decoder_inputs'], ps_data['decoder_inputs']), axis=0)
+        targets = np.concatenate((cf_data['targets'], ps_data['targets']), axis=0)
+        
+        # Write data to a file
+        output_folder = os.path.join(self.output_dir, "CodeForce_A_difficulty")
+        self.write_file(problems, decoder_inputs, targets, output_folder)
     
     def write_file(self, problems, decoder_inputs, targets, output_dir):
         os.makedirs(output_dir, exist_ok=True)
         filepath = os.path.join(output_dir, f"tokenized_padded_data.npz")
         np.savez_compressed(filepath, problems=problems, decoder_inputs=decoder_inputs, targets=targets)
         
-def load_data(dataset_path):
-    Loader = Dataset_Loaders()
-    match dataset_path:
-        case "/workspace/Training_Data/CodeForces_A_difficulty":
-            Loader.load_CodeForces_A_difficulty()
-            Loader.write_file("/workspace/Training_Data/CodeForces_A_difficulty")
+    def load_data(self):
+        match self.output_dir:
+            case "/workspace/Training_Data/CodeForces_A_difficulty":
+                self.load_CodeForces_A_difficulty()
 
-        case "/workspace/Training_Data/ProblemSolutionV3":
-            Loader.load_ProblemSolutionPythonV3()
-            Loader.write_file("/workspace/Training_Data/ProblemSolutionV3")
+            case "/workspace/Training_Data/ProblemSolutionV3":
+                self.load_ProblemSolutionPythonV3()
 
-        case "All":
-            Loader.load_CodeForces_A_difficulty()
-            Loader.load_ProblemSolutionPythonV3()
-            Loader.write_file("/workspace/Training_Data/All")
-        
-        case _:
-            "Invalid dataset"
+            case "/workspace/Training_Data/All":
+                self.load_All()
+
+            case _:
+                "Invalid dataset"

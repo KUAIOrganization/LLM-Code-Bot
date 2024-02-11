@@ -11,6 +11,4 @@ FROM nvcr.io/nvidia/rapidsai/notebooks:23.10-cuda12.0-py3.10
 # Install dependencies
 RUN pip install tensorflow[and-cuda]
 RUN pip install numpy matplotlib
-RUN pip install jupyter jupyterlab \
-    && pip install -U "jupyter-server<2.0.0"
 RUN pip install tensorboard

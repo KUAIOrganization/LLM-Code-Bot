@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import tensorflow as tf
 import numpy as np
 
-from .transform_raw_data import load_data
+from .transform_raw_data import Dataset_Loader
 
 
 @dataclass
@@ -32,13 +32,15 @@ class ModelArgs:
 
 class Loader:
     def __init__(self, dataset_path, args: ModelArgs):
+        self.batch_size = args.batch_size
         self.dataset_path = dataset_path
         self.dataset = None
 
     def create_dataset(self):
         # Ensure data exists
         if not os.path.exists(self.dataset_path):
-            load_data(self.dataset_path)
+            loader = Dataset_Loader(self.dataset_path)
+            loader.load_data()
         
         # Load the .npz file
         data = np.load(self.dataset_path)
@@ -48,7 +50,7 @@ class Loader:
         
         # Create the dataset
         self.dataset = tf.data.Dataset.from_tensor_slices(((problems, decoder_inputs), targets))
-        self.dataset.shuffle(buffer_size=1024).batch(args.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
+        self.dataset.shuffle(buffer_size=1024).batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
         
         return self.dataset
 
@@ -73,17 +75,23 @@ def positional_encoder(seq_length, dim):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args, name="EncoderLayer"):
+    def __init__(self, args: ModelArgs, name="EncoderLayer"):
         super(EncoderLayer, self).__init__(name=name)
 
+        self.dim = args.dim
+        self.dim_ff = args.dim_ff
+        self.dim_key = args.dim_head # dim_head
+        self.num_heads = args.num_heads
+        self.dropout_rate = args.dropout_rate
+
         # Multi-Head Self-Attention layer
-        self.mha = tf.keras.layers.MultiHeadAttention(num_heads=args.num_heads, key_dim=args.key_dim)
+        self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
 
         # Feed-Forward Network Layers
         self.ffn = tf.keras.Sequential([
-            tf.keras.layers.Dense(args.dim_ff, kernel_initializer='he_normal', name="encoder_ffn_dense1"), 
+            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name="encoder_ffn_dense1"), 
             tf.keras.layers.LeakyReLU(alpha=0.01), # Trying LeakyReLu
-            tf.keras.layers.Dense(args.dim, kernel_initializer='he_normal', name="encoder_ffn_dense2")
+            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name="encoder_ffn_dense2")
         ], name="encoder_ffn")
 
         # Normalization Layers
@@ -91,8 +99,8 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="encoder_layernorm2")
 
         # Dropout
-        self.dropout_mha = tf.keras.layers.Dropout(args.dropout_rate)
-        self.dropout_ffn = tf.keras.layers.Dropout(args.dropout_rate)
+        self.dropout_mha = tf.keras.layers.Dropout(self.dropout_rate)
+        self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate)
 
     def call(self, x, training=False):
         # Self-Attention
@@ -121,18 +129,24 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args, name="DecoderLayer"):
+    def __init__(self, args: ModelArgs, name="DecoderLayer"):
         super(DecoderLayer, self).__init__(name=name)
         
+        self.dim = args.dim
+        self.dim_ff = args.dim_ff
+        self.dropout_rate = args.dropout_rate
+        self.num_heads = args.num_heads
+        self.dim_key = args.dim_head # dim_head
+
         # Self-Attention and Cross-Attention layers
-        self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=args.num_heads, key_dim=args.key_dim)
-        self.mha2 = tf.keras.layers.MultiHeadAttention(num_heads=args.num_heads, key_dim=args.key_dim)
+        self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
+        self.mha2 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
         
         # Feed Forward Network Layers
         self.ffn = tf.keras.Sequential([
-            tf.keras.layers.Dense(dim_ff, kernel_initializer='he_normal', name="decoder_ffn_dense1"), 
+            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name="decoder_ffn_dense1"), 
             tf.keras.layers.LeakyReLU(alpha=0.01), # Trying LeakyReLu
-            tf.keras.layers.Dense(dim, kernel_initializer='he_normal', name="decoder_ffn_dense2")
+            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name="decoder_ffn_dense2")
         ], name="decoder_ffn")
         
         # Normalization Layers
@@ -141,9 +155,9 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="decoder_layernorm3")
         
         # Dropout
-        self.dropout_self_attn = tf.keras.layers.Dropout(args.dropout_rate)
-        self.dropout_cross_attn = tf.keras.layers.Dropout(args.dropout_rate)
-        self.dropout_ffn = tf.keras.layers.Dropout(args.dropout_rate)
+        self.dropout_self_attn = tf.keras.layers.Dropout(self.dropout_rate)
+        self.dropout_cross_attn = tf.keras.layers.Dropout(self.dropout_rate)
+        self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate)
 
     def call(self, x, enc_output, training=False, look_ahead_mask=None, padding_mask=None):
         # Self-Attention
@@ -179,8 +193,8 @@ class DecoderLayer(tf.keras.layers.Layer):
 class TransformerEncoder(tf.keras.layers.Layer):
     def __init__(self, args, name="TransformerEncoder"):
         super(TransformerEncoder, self).__init__(name=name)
-        self.num_layers = num_layers
-        self.enc_layers = [EncoderLayer(args, name=f"encoder_layer_{i}") for i in range(num_layers)]
+        self.num_layers = args.num_layers
+        self.enc_layers = [EncoderLayer(args, name=f"encoder_layer_{i}") for i in range(self.num_layers)]
 
     def call(self, x: tf.Tensor, training=False) -> tf.Tensor:
         for layer in self.enc_layers:
@@ -189,10 +203,10 @@ class TransformerEncoder(tf.keras.layers.Layer):
 
 
 class TransformerDecoder(tf.keras.layers.Layer):
-    def __init__(self, args, name="TransformerDecoder"):
+    def __init__(self, args: ModelArgs, name="TransformerDecoder"):
         super(TransformerDecoder, self).__init__(name=name)
-        self.num_layers = num_layers
-        self.dec_layers = [DecoderLayer(dim, dim_ff, key_dim, num_heads, dropout_rate, name=f"decoder_layer_{i}") for i in range(num_layers)]
+        self.num_layers = args.num_layers
+        self.dec_layers = [DecoderLayer(args, name=f"decoder_layer_{i}") for i in range(self.num_layers)]
 
     def call(self, x: tf.Tensor, enc_output: tf.Tensor, training=False) -> tf.Tensor:
         for layer in self.dec_layers:
@@ -204,14 +218,18 @@ class Transformer(tf.keras.Model):
     def __init__(self, args):
         super(Transformer, self).__init__()
         
+        self.dim = args.dim
+        self.problem_vocab_size = args.problem_vocab_size
+        self.solution_vocab_size = args.solution_vocab_size
+
         # Separate embedding for input and output
-        self.problem_embedding_layer = tf.keras.layers.Embedding(args.problem_vocab_size, args.dim, mask_zero=True)
-        self.solution_embedding_layer = tf.keras.layers.Embedding(args.solution_vocab_size, args.dim, mask_zero=True)
+        self.problem_embedding_layer = tf.keras.layers.Embedding(self.problem_vocab_size, self.dim, mask_zero=True)
+        self.solution_embedding_layer = tf.keras.layers.Embedding(self.solution_vocab_size, self.dim, mask_zero=True)
 
         self.encoder = TransformerEncoder(args, name="encoder")
         self.decoder = TransformerDecoder(args, name="decoder")
 
-        self.final_layer = tf.keras.layers.Dense(args.solution_vocab_size, name="output_layer")
+        self.final_layer = tf.keras.layers.Dense(self.solution_vocab_size, name="output_layer")
 
     def call(self, encoder_input, decoder_input, training=False):
         # Embed input sequences
@@ -236,7 +254,9 @@ class Transformer(tf.keras.Model):
         return final_output
 
 
-def build_and_compile(args):
+def build_and_compile():
+    args = ModelArgs()
+
     # Define model inputs
     encoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='encoder_input')
     decoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='decoder_input')
