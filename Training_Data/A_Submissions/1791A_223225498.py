@@ -1,1 +1,0 @@
-for c,_ in[*open(0)][1:]:print('NYOE S'[c in'cdfores'::2])

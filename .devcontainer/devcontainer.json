@@ -1,0 +1,20 @@
+// .devcontainer/devcontainer.json
+{
+    "name": "CodeLM",
+    "image": "slm_docker:v2",
+    "runArgs": [
+        "--gpus", "all",
+        "--shm-size=1g",
+        "--ulimit", "memlock=-1",
+        "--ulimit", "stack=67108864",
+        "--net=host"
+    ],
+    "workspaceFolder": "/workspace",
+    "workspaceMount": "source=C:\\\\Program Files\\\\Coding Programs\\\\GitHub\\\\LLM-Code-Bot,target=/workspace,type=bind,consistency=cached",
+    "settings": { 
+        "terminal.integrated.gpuAcceleration": "on"
+    },
+    "extensions": [
+        "ms-python.python"
+    ]
+}

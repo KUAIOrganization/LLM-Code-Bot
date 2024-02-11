@@ -1,1 +1,0 @@
-for k in[*open(0)][2::2]:a=sorted(map(int,k.split()));print(a[-(a[0]>=0)])
