@@ -23,7 +23,7 @@ class Tokenizers:
         self.problem_tokenizer.fit_on_texts(problems)
         
         # Store tokenizer information
-        with open('problem_tokenizer.pkl', 'wb') as f:
+        with open('Transformer/model_files/solution_tokenizer.pkl', 'wb') as f:
             pickle.dump(self.problem_tokenizer, f)
         
         # Tokenize with Keras tokenizer
@@ -40,7 +40,6 @@ class Tokenizers:
         targets = []
         for solution in solutions:
             tokens = []
-            print(solution)
             for token in tokenize.generate_tokens(io.StringIO(solution).readline): # generate_tokens only takes readlines
                 tokens.append(token.string)
             decoder_inputs.append(["XXSOS"] + tokens)
@@ -56,7 +55,7 @@ class Tokenizers:
         targets = pad_sequences(targets, padding='post', maxlen=self.max_length_output)
 
         # Store tokenizer information
-        with open('solution_tokenizer.pkl', 'wb') as f:
+        with open('Transformer/model_files/solution_tokenizer.pkl', 'wb') as f:
             pickle.dump(self.solution_tokenizer, f)
         
         return decoder_inputs, targets

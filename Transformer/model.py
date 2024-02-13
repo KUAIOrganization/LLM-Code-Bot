@@ -39,6 +39,7 @@ class Loader:
     def create_dataset(self):
         # Ensure data exists
         if not os.path.exists(self.dataset_path):
+            print(self.dataset_path)
             loader = Dataset_Loader(self.dataset_path)
             loader.load_data()
         
@@ -254,9 +255,7 @@ class Transformer(tf.keras.Model):
         return final_output
 
 
-def build_and_compile():
-    args = ModelArgs()
-
+def build_and_compile(args: ModelArgs):
     # Define model inputs
     encoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='encoder_input')
     decoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='decoder_input')

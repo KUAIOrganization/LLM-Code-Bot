@@ -38,13 +38,13 @@ def main():
     loader.create_dataset() # Do we need this the same?  Should it be changed?
     
     # Load tokenizer information
-    with open('problem_tokenizer.pkl', 'rb') as f:
+    with open('Transformer/model_files/problem_tokenizer.pkl', 'rb') as f:
         problem_tokenizer = pickle.load(f)
-        args.problem_vocab_size = len(loader.problem_tokenizer.word_index) + 1
-    
-    with open('solution_tokenizer.pkl', 'rb') as f:
+        args.problem_vocab_size = len(problem_tokenizer.word_index) + 1
+
+    with open('Transformer/model_files/solution_tokenizer.pkl', 'rb') as f:
         solution_tokenizer = pickle.load(f)
-        args.solution_vocab_size = len(loader.solution_tokenizer.word_index) + 1
+        args.solution_vocab_size = len(solution_tokenizer.word_index) + 1
     
     # Build the model
     model = build_and_compile(args)
