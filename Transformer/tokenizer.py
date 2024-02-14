@@ -15,15 +15,16 @@ class Tokenizers:
     def __init__(self):
         self.problem_tokenizer = Tokenizer(filters='', oov_token='UNK')
         self.solution_tokenizer = Tokenizer(filters='', oov_token='UNK')
-        self.max_length_input = 50
+        self.max_length_input = 50 # These should be passed as parameters - C.
         self.max_length_output = 530
+        # Also I would say to pass the SOS and EOS tokens as parameters. Probably have them have default values of "XXSOS" and "XXEOS" -C.
     
     def tokenize_input(self, problems):
         # Fit Keras tokenizer
         self.problem_tokenizer.fit_on_texts(problems)
         
         # Store tokenizer information
-        with open('Transformer/model_files/solution_tokenizer.pkl', 'wb') as f:
+        with open('Transformer/model_files/problem_tokenizer.pkl', 'wb') as f: # This file was solution_tokenizer. I changed it - lmk if that's wrong. -C.
             pickle.dump(self.problem_tokenizer, f)
         
         # Tokenize with Keras tokenizer

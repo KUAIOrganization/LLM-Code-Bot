@@ -45,7 +45,7 @@ class Dataset_Loader:
 
         # Load solutions
         submissions_dir = os.path.join(self.CodeForces_A_difficulty_dir, "A_submissions")
-        raw_solutions = [[] for _ in range(2000)] # Up to 2000 problem question indices
+        raw_solutions = [[] for _ in range(2000)] # Up to 2000 problem question indices | I would have this (2000) be a static variable at the top of the class -C.
         submissions = glob.glob(os.path.join(submissions_dir, "*.py"))
 
         for submission_path in submissions:

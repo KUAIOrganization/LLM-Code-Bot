@@ -12,7 +12,7 @@ from Transformer import ModelArgs, Loader, Transformer, build_and_compile
 
 
 def main():
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(os.path.abspath(__file__)) # Does this point to /workspace when you run it?
     base_log_dir = os.path.join(base_dir, "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
     fit_log_dir = os.path.join(base_log_dir, "fit")
     debug_log_dir = os.path.join(base_log_dir, "debug")
@@ -36,6 +36,10 @@ def main():
     dataset_path = os.path.join("/workspace/Training_Data", f"{dataset_choice}", "tokenized_padded_data.npz")
     loader = Loader(dataset_path, args)
     loader.create_dataset() # Do we need this the same?  Should it be changed?
+    # ^ I would just either call this in the constructor, or have it be a standalone method.
+    # I would do the standalone method because you aren't even passing the Loader object anywhere.
+    # You make it, use its method to make the dataset, and then pass the dataset (not the loader) to the model.
+    # The loader only serves as a container for the method. -C.
     
     # Load tokenizer information
     with open('Transformer/model_files/problem_tokenizer.pkl', 'rb') as f:
