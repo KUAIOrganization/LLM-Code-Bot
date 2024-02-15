@@ -9,7 +9,7 @@ from dataclasses import dataclass
 import tensorflow as tf
 import numpy as np
 
-from .transform_raw_data import Dataset_Loader
+from .transform_raw_data import Dataset_Loader, DatasetType
 
 
 @dataclass
@@ -31,20 +31,21 @@ class ModelArgs:
 
 
 class Loader:
-    def __init__(self, dataset_path, args: ModelArgs):
+    def __init__(self, root_path: str, dataset_type: DatasetType, args: ModelArgs):
         self.batch_size = args.batch_size
-        self.dataset_path = dataset_path
+        self.dataset_type = dataset_type
+        self.root_path = root_path
         self.dataset = None
 
     def create_dataset(self):
         # Ensure data exists
-        if not os.path.exists(self.dataset_path):
-            print(self.dataset_path)
-            loader = Dataset_Loader(self.dataset_path)
+        if not os.path.exists(self.dataset_type.tokenized_path):
+            print(self.dataset_type)
+            loader = Dataset_Loader(self.root_path, self.dataset_type)
             loader.load_data()
         
         # Load the .npz file
-        data = np.load(self.dataset_path)
+        data = np.load(self.dataset_type.tokenized_path)
         problems = data['problems']
         decoder_inputs = data['decoder_inputs']
         targets = data['targets']

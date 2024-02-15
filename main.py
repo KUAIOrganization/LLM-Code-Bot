@@ -8,7 +8,7 @@ import os
 import tensorflow as tf
 import pickle
 
-from Transformer import ModelArgs, Loader, Transformer, build_and_compile
+from Transformer import ModelArgs, Loader, Transformer, build_and_compile, DatasetType
 
 
 def main():
@@ -32,9 +32,8 @@ def main():
     args = ModelArgs()
     
     # Initialize the Loader
-    dataset_choice = "All" # [All, CodeForces_A_difficulty, ProblemSolutionPythonV3]
-    dataset_path = os.path.join("/workspace/Training_Data", f"{dataset_choice}", "tokenized_padded_data.npz")
-    loader = Loader(dataset_path, args)
+    dataset_choice = DatasetType.CODEFORCES_A # [All, CodeForces_A_difficulty, ProblemSolutionPythonV3]
+    loader = Loader(base_dir, dataset_choice, args)
     loader.create_dataset() # Do we need this the same?  Should it be changed?
     # ^ I would just either call this in the constructor, or have it be a standalone method.
     # I would do the standalone method because you aren't even passing the Loader object anywhere.

@@ -5,6 +5,7 @@
 import datetime
 import json
 import os
+from enum import Enum
 
 import glob
 import numpy as np
@@ -13,21 +14,34 @@ import re
 
 from .tokenizer import Tokenizers
 
+class DatasetType(Enum):
+    def __new__(cls, *args, **kwds):
+          value = len(cls.__members__) + 1
+          obj = object.__new__(cls)
+          obj._value_ = value
+          return obj
+    
+    def __init__(self, raw_path: str, tokenized_path: str):
+        self.raw_path = raw_path
+        self.tokenized_path = tokenized_path
+
+    CODEFORCES_A = os.path.join("Training_Data", "CodeForces_A_difficulty"), os.path.join("Training_Data", "CodeForces_A_difficulty", "tokenized_padded_data.npz")
+    PROBLEM_SOLUTION_V3 = os.path.join("Training_Data", "ProblemSolutionPythonV3", "ProblemSolutionPythonV3.csv"), os.path.join("Training_Data", "ProblemSolutionV3", "tokenized_padded_data.npz")
+    ALL = "", os.path.join("Training_Data", "All", "tokenized_padded_data.npz")
+
 
 class Dataset_Loader:
-    def __init__(self, dataset_path):
-        self.loader_log_dir = os.path.join("/workspace/logs" + datetime.datetime.now().strftime("%m_%d_%H_%M"), "loader")
-        self.base_dir = "/workspace/Training_Data/"
-        self.output_dir = dataset_path
-        self.CodeForces_A_difficulty_dir = os.path.join(self.base_dir, "CodeForces_A_difficulty")
-        self.ProblemSolutionPythonV3_dir = os.path.join(self.base_dir, "ProblemSolutionPythonV3")
-        self.All_dir = os.path.join(self.base_dir, "All")
+    def __init__(self, root_path: str, dataset_type: DatasetType):
+        self.loader_log_dir = os.path.join(root_path, "logs" + datetime.datetime.now().strftime("%m_%d_%H_%M"), "loader")
+        self.root_path = root_path
+        self.output_dir = os.path.join(root_path, dataset_type.tokenized_path)
+        self.dataset_type = dataset_type
 
         self.tokenizer = Tokenizers()
         
     def load_CodeForces_A_difficulty(self):
         # Load problems
-        problems_path = os.path.join(self.CodeForces_A_difficulty_dir, "A_problems.json")
+        problems_path = os.path.join(self.root_path, DatasetType.CODEFORCES_A.raw_path, "A_problems.json")
         with open(problems_path, 'r') as problems_file:
             problems_list = json.load(problems_file)
         raw_problems = {}
@@ -44,7 +58,7 @@ class Dataset_Loader:
             raw_problems[problem_id] = concatenated_problem
 
         # Load solutions
-        submissions_dir = os.path.join(self.CodeForces_A_difficulty_dir, "A_submissions")
+        submissions_dir = os.path.join(self.root_path, DatasetType.CODEFORCES_A.raw_path, "A_submissions")
         raw_solutions = [[] for _ in range(2000)] # Up to 2000 problem question indices | I would have this (2000) be a static variable at the top of the class -C.
         submissions = glob.glob(os.path.join(submissions_dir, "*.py"))
 
@@ -67,10 +81,10 @@ class Dataset_Loader:
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
         
         # Write data to a file
-        self.write_file(problems, decoder_inputs, targets, self.CodeForces_A_difficulty_dir)
+        self.write_file(problems, decoder_inputs, targets, os.path.join(self.root_path, DatasetType.CODEFORCES_A.tokenized_path))
 
     def load_ProblemSolutionPythonV3(self):
-        problems_path = os.path.join(self.ProblemSolutionPythonV3_dir, "ProblemSolutionPythonV3.csv")
+        problems_path = os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.raw_path)
         df = pd.read_csv(problems_path, encoding_errors='ignore')
 
         # Initialize problems and solutions lists
@@ -89,12 +103,12 @@ class Dataset_Loader:
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
         # Write data to a file
-        self.write_file(problems, decoder_inputs, targets, self.ProblemSolutionPythonV3_dir)
+        self.write_file(problems, decoder_inputs, targets, os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.tokenized_path))
     
     def load_All(self):
         # Load the npz files
-        CodeForces_path = os.path.join(self.CodeForces_A_difficulty_dir, "tokenized_padded_data.npz")
-        ProblemSolutionV3_path = os.path.join(self.ProblemSolutionPythonV3_dir, "tokenized_padded_data.npz")
+        CodeForces_path = os.path.join(self.root_path, DatasetType.CODEFORCES_A.tokenized_path)
+        ProblemSolutionV3_path = os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.tokenized_path)
 
         if not os.path.exists(CodeForces_path):
             temp_parent_dir = os.path.abspath(os.path.join(self.output_dir, os.pardir))
@@ -114,22 +128,21 @@ class Dataset_Loader:
         targets = np.concatenate((cf_data['targets'], ps_data['targets']), axis=0)
         
         # Write data to a file
-        self.write_file(problems, decoder_inputs, targets, self.All_dir)
+        self.write_file(problems, decoder_inputs, targets, DatasetType.ALL.tokenized_path)
     
-    def write_file(self, problems, decoder_inputs, targets, output_dir):
-        os.makedirs(output_dir, exist_ok=True)
-        filepath = os.path.join(output_dir, f"tokenized_padded_data.npz")
-        np.savez_compressed(filepath, problems=problems, decoder_inputs=decoder_inputs, targets=targets)
+    def write_file(self, problems, decoder_inputs, targets, output_file):
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        np.savez_compressed(output_file, problems=problems, decoder_inputs=decoder_inputs, targets=targets)
         
     def load_data(self):
-        match self.output_dir:
-            case "/workspace/Training_Data/CodeForces_A_difficulty/tokenized_padded_data.npz":
+        match self.dataset_type:
+            case DatasetType.CODEFORCES_A:
                 self.load_CodeForces_A_difficulty()
 
-            case "/workspace/Training_Data/ProblemSolutionV3/tokenized_padded_data.npz":
+            case DatasetType.PROBLEM_SOLUTION_V3:
                 self.load_ProblemSolutionPythonV3()
 
-            case "/workspace/Training_Data/All/tokenized_padded_data.npz":
+            case DatasetType.ALL:
                 self.load_All()
 
             case _:
