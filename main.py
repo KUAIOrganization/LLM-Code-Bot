@@ -13,7 +13,7 @@ from Transformer import ModelArgs, Loader, Transformer, build_and_compile, Datas
 
 def main():
     base_dir = os.path.dirname(os.path.abspath(__file__)) # Does this point to /workspace when you run it?
-    base_log_dir = os.path.join(base_dir, "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
+    base_log_dir = os.path.join(base_dir, "logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
     fit_log_dir = os.path.join(base_log_dir, "fit")
     debug_log_dir = os.path.join(base_log_dir, "debug")
 
@@ -32,7 +32,7 @@ def main():
     args = ModelArgs()
     
     # Initialize the Loader
-    dataset_choice = DatasetType.CODEFORCES_A # [All, CodeForces_A_difficulty, ProblemSolutionPythonV3]
+    dataset_choice = DatasetType.CODEFORCES_A # [All, CODEFORCES_A, PROBLEM_SOLUTION_V3]
     loader = Loader(base_dir, dataset_choice, args)
     loader.create_dataset() # Do we need this the same?  Should it be changed?
     # ^ I would just either call this in the constructor, or have it be a standalone method.
@@ -83,3 +83,26 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+    #print(len(loader.problem_tokenizer.word_index) + 1)
+    #print(len(loader.solution_tokenizer.word_index) + 1)
+
+    # Clears logs folder
+    #!find logs -mindepth 1 -delete
+
+    #tf.debugging.experimental.disable_dump_debug_info()
+
+    #!kill 415
+
+    #print("hello")
+
+    #print(tf.sysconfig.get_build_info())
+
+    #tf.__version__
+    #!tensorboard --version
+
+    #!pip install --upgrade tensorflow
+    #!pip install --upgrade tensorboard
+
+    #f.config.run_functions_eagerly(False)
+    #f.executing_eagerly()

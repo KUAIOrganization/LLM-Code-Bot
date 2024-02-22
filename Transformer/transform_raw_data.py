@@ -21,13 +21,15 @@ class DatasetType(Enum):
           obj._value_ = value
           return obj
     
-    def __init__(self, raw_path: str, tokenized_path: str):
+    def __init__(self, raw_path: str, tokenized_path: str, maximum_length_input: int, maximum_length_output: int):
         self.raw_path = raw_path
         self.tokenized_path = tokenized_path
+        self.maximum_length_input = maximum_length_input
+        self.maximum_length_output = maximum_length_output
 
-    CODEFORCES_A = os.path.join("Training_Data", "CodeForces_A_difficulty"), os.path.join("Training_Data", "CodeForces_A_difficulty", "tokenized_padded_data.npz")
-    PROBLEM_SOLUTION_V3 = os.path.join("Training_Data", "ProblemSolutionPythonV3", "ProblemSolutionPythonV3.csv"), os.path.join("Training_Data", "ProblemSolutionV3", "tokenized_padded_data.npz")
-    ALL = "", os.path.join("Training_Data", "All", "tokenized_padded_data.npz")
+    CODEFORCES_A = os.path.join("Training_Data", "CodeForces_A_difficulty"), os.path.join("Training_Data", "CodeForces_A_difficulty", "tokenized_padded_data.npz"), 643, 529
+    PROBLEM_SOLUTION_V3 = os.path.join("Training_Data", "ProblemSolutionV3", "ProblemSolutionV3.csv"), os.path.join("Training_Data", "ProblemSolutionV3", "tokenized_padded_data.npz"), 99, 1305
+    ALL = "", os.path.join("Training_Data", "All", "tokenized_padded_data.npz"), 643, 1305
 
 
 class Dataset_Loader:
@@ -38,7 +40,7 @@ class Dataset_Loader:
         self.dataset_type = dataset_type
 
         self.tokenizer = Tokenizers()
-        
+    
     def load_CodeForces_A_difficulty(self):
         # Load problems
         problems_path = os.path.join(self.root_path, DatasetType.CODEFORCES_A.raw_path, "A_problems.json")
@@ -109,7 +111,7 @@ class Dataset_Loader:
         # Load the npz files
         CodeForces_path = os.path.join(self.root_path, DatasetType.CODEFORCES_A.tokenized_path)
         ProblemSolutionV3_path = os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.tokenized_path)
-
+        
         if not os.path.exists(CodeForces_path):
             temp_parent_dir = os.path.abspath(os.path.join(self.output_dir, os.pardir))
             self.output_dir = os.path.join(temp_parent_dir, "CodeForces_A_difficulty")

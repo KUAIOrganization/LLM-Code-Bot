@@ -14,25 +14,33 @@ from .transform_raw_data import Dataset_Loader, DatasetType
 
 @dataclass
 class ModelArgs:
-    dim: int = 256
+    dim: int = 64
     dim_ff = dim * 4
-    num_layers: int = 6
+    num_layers: int = 2 # change back to 6
     num_heads: int = 4
     dim_head = dim // num_heads
     
     problem_vocab_size: int = 0  # Set when the dataset is loaded
     solution_vocab_size: int = 0
+    input_seq_length: int = 0 
+    output_seq_length: int = 0
     
     batch_size: int = 32
     learning_rate: float = 1e-4
-    dropout_rate: float = 0.0
+    dropout_rate: float = 0.0 # Not used
     
-    epochs: int = 2
+    epochs: int = 1
 
 
 class Loader:
     def __init__(self, root_path: str, dataset_type: DatasetType, args: ModelArgs):
+        args.input_seq_length = DatasetType.maximum_length_input # Just throwing this here, is this best? -B
+        args.output_seq_length = DatasetType.maximum_length_output
+
         self.batch_size = args.batch_size
+        self.input_seq_length = args.input_seq_length # Then immediately called from args -B
+        self.output_seq_length = args.output_seq_length
+
         self.dataset_type = dataset_type
         self.root_path = root_path
         self.dataset = None
@@ -46,10 +54,18 @@ class Loader:
         
         # Load the .npz file
         data = np.load(self.dataset_type.tokenized_path)
+
         problems = data['problems']
         decoder_inputs = data['decoder_inputs']
         targets = data['targets']
-        
+
+        assert self.input_seq_length < len(problems[0]), "ModelArgs input_seq_length is larger than actual data length"
+        assert self.output_seq_length < len(targets[0]), "ModelArgs output_seq_length is larger than actual data length"
+
+        problems = [problem[:self.input_seq_length] for problem in problems]
+        decoder_inputs = [decoder_input[:self.output_seq_length] for decoder_input in decoder_inputs]
+        targets = [target[:self.output_seq_length] for target in targets]
+
         # Create the dataset
         self.dataset = tf.data.Dataset.from_tensor_slices(((problems, decoder_inputs), targets))
         self.dataset.shuffle(buffer_size=1024).batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
@@ -221,6 +237,8 @@ class Transformer(tf.keras.Model):
         super(Transformer, self).__init__()
         
         self.dim = args.dim
+        self.input_seq_length = args.input_seq_length
+        self.output_seq_length = args.output_seq_length
         self.problem_vocab_size = args.problem_vocab_size
         self.solution_vocab_size = args.solution_vocab_size
 
@@ -239,10 +257,10 @@ class Transformer(tf.keras.Model):
         decoder_emb = self.solution_embedding_layer(decoder_input)
         
         # Generate and add positional encodings
-        seq_length_enc = tf.shape(encoder_input)[1]
-        seq_length_dec = tf.shape(decoder_input)[1]
-        pos_encoding_enc = positional_encoder(seq_length_enc, self.dim)
-        pos_encoding_dec = positional_encoder(seq_length_dec, self.dim)
+        #input_seq_length = tf.shape(encoder_input)[1] # Old method doesn't work anymore
+        #output_seq_length = tf.shape(decoder_input)[1]
+        pos_encoding_enc = positional_encoder(self.input_seq_length, self.dim)
+        pos_encoding_dec = positional_encoder(self.output_seq_length, self.dim)
         
         encoder_emb += pos_encoding_enc
         decoder_emb += pos_encoding_dec
@@ -305,27 +323,3 @@ def train_step(model, optimizer, tokenized_question, tokenized_code, clip_norm=1
     optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
 
     return average_loss
-
-
-#print(len(loader.problem_tokenizer.word_index) + 1)
-#print(len(loader.solution_tokenizer.word_index) + 1)
-
-# Clears logs folder
-#!find logs -mindepth 1 -delete
-
-#tf.debugging.experimental.disable_dump_debug_info()
-
-#!kill 415
-
-#print("hello")
-
-#print(tf.sysconfig.get_build_info())
-
-#tf.__version__
-#!tensorboard --version
-
-#!pip install --upgrade tensorflow
-#!pip install --upgrade tensorboard
-
-#f.config.run_functions_eagerly(False)
-#f.executing_eagerly()
