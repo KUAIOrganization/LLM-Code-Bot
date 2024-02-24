@@ -34,11 +34,11 @@ class ModelArgs:
 
 class Loader:
     def __init__(self, root_path: str, dataset_type: DatasetType, args: ModelArgs):
-        args.input_seq_length = DatasetType.maximum_length_input # Just throwing this here, is this best? -B
-        args.output_seq_length = DatasetType.maximum_length_output
+        args.input_seq_length = dataset_type.max_length_input
+        args.output_seq_length = dataset_type.max_length_output
 
         self.batch_size = args.batch_size
-        self.input_seq_length = args.input_seq_length # Then immediately called from args -B
+        self.input_seq_length = args.input_seq_length
         self.output_seq_length = args.output_seq_length
 
         self.dataset_type = dataset_type
@@ -59,8 +59,8 @@ class Loader:
         decoder_inputs = data['decoder_inputs']
         targets = data['targets']
 
-        assert self.input_seq_length < len(problems[0]), "ModelArgs input_seq_length is larger than actual data length"
-        assert self.output_seq_length < len(targets[0]), "ModelArgs output_seq_length is larger than actual data length"
+        assert self.input_seq_length <= len(problems[0]), "ModelArgs input_seq_length is larger than actual data length"
+        assert self.output_seq_length <= len(targets[0]), "ModelArgs output_seq_length is larger than actual data length"
 
         problems = [problem[:self.input_seq_length] for problem in problems]
         decoder_inputs = [decoder_input[:self.output_seq_length] for decoder_input in decoder_inputs]

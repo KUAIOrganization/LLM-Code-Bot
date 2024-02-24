@@ -32,7 +32,7 @@ def main():
     args = ModelArgs()
     
     # Initialize the Loader
-    dataset_choice = DatasetType.CODEFORCES_A # [All, CODEFORCES_A, PROBLEM_SOLUTION_V3]
+    dataset_choice = DatasetType.ALL # [All, CODEFORCES_A, PROBLEM_SOLUTION_V3]
     loader = Loader(base_dir, dataset_choice, args)
     loader.create_dataset() # Do we need this the same?  Should it be changed?
     # ^ I would just either call this in the constructor, or have it be a standalone method.
