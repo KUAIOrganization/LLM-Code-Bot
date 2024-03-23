@@ -53,6 +53,7 @@ class Tokenizers:
         # Pad to same length
         max_length_output = max(len(seq) for seq in targets)
         decoder_inputs = pad_sequences(decoder_inputs, padding='post', maxlen=max_length_output)
+        targets = pad_sequences(targets, padding='post', maxlen=max_length_output)
         
         # Store tokenizer information
         with open('Transformer/model_files/solution_tokenizer.pkl', 'wb') as f:

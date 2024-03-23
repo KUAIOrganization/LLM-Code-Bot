@@ -14,28 +14,28 @@ from .transform_raw_data import Dataset_Loader, DatasetType
 
 @dataclass
 class ModelArgs:
-    dim: int = 64
+    dim: int = 512
     dim_ff = dim * 4
-    num_layers: int = 2 # change back to 6
+    num_layers: int = 6
     num_heads: int = 4
-    dim_head = dim // num_heads
-    
+    dim_head: int = dim // num_heads
+
     problem_vocab_size: int = 0  # Set when the dataset is loaded
     solution_vocab_size: int = 0
-    input_seq_length: int = 0 
+    input_seq_length: int = 0
     output_seq_length: int = 0
     
     batch_size: int = 32
     learning_rate: float = 1e-4
     dropout_rate: float = 0.0 # Not used
     
-    epochs: int = 1
+    epochs: int = 2
 
 
 class Loader:
-    def __init__(self, root_path: str, dataset_type: DatasetType, args: ModelArgs):
-        args.input_seq_length = dataset_type.max_length_input
-        args.output_seq_length = dataset_type.max_length_output
+    def __init__(self, root_path: str, dataset_type: DatasetType, args: ModelArgs, use_reduced_dataset: bool):
+        args.input_seq_length = dataset_type.reduced_length_input if use_reduced_dataset else dataset_type.max_length_input
+        args.output_seq_length = dataset_type.reduced_length_output if use_reduced_dataset else dataset_type.max_length_output
 
         self.batch_size = args.batch_size
         self.input_seq_length = args.input_seq_length
@@ -46,25 +46,27 @@ class Loader:
         self.dataset = None
 
     def create_dataset(self):
-        # Ensure data exists
+        # Load/generate npz
         if not os.path.exists(self.dataset_type.tokenized_path):
-            print(self.dataset_type)
             loader = Dataset_Loader(self.root_path, self.dataset_type)
             loader.load_data()
         
-        # Load the .npz file
         data = np.load(self.dataset_type.tokenized_path)
+        problems_all = data['problems'][:]
+        decoder_inputs_all = data['decoder_inputs']
+        targets_all = data['targets']
 
-        problems = data['problems']
-        decoder_inputs = data['decoder_inputs']
-        targets = data['targets']
+        # Only add problems with length < input_seq_length for time complexity
+        assert self.input_seq_length <= len(problems_all[0]), "ModelArgs input_seq_length is larger than actual data length"
+        assert self.output_seq_length <= len(targets_all[0]), "ModelArgs output_seq_length is larger than actual data length"
 
-        assert self.input_seq_length <= len(problems[0]), "ModelArgs input_seq_length is larger than actual data length"
-        assert self.output_seq_length <= len(targets[0]), "ModelArgs output_seq_length is larger than actual data length"
-
-        problems = [problem[:self.input_seq_length] for problem in problems]
-        decoder_inputs = [decoder_input[:self.output_seq_length] for decoder_input in decoder_inputs]
-        targets = [target[:self.output_seq_length] for target in targets]
+        short_problem_indices = np.where(problems_all[:, self.input_seq_length - 1] == 0)[0]
+        short_target_indices = np.where(targets_all[:, self.output_seq_length - 1] == 0)[0]
+        indices = np.intersect1d(short_problem_indices, short_target_indices) # Where both conditions are met
+        
+        problems = problems_all[indices][:, :self.input_seq_length]
+        decoder_inputs = decoder_inputs_all[indices][:, :self.output_seq_length]
+        targets = targets_all[indices][:, :self.output_seq_length]
 
         # Create the dataset
         self.dataset = tf.data.Dataset.from_tensor_slices(((problems, decoder_inputs), targets))
@@ -88,7 +90,7 @@ def positional_encoder(seq_length, dim):
     
     # Interlace and reshape
     pos_encoding = tf.reshape(tf.concat([sine, cosine], axis=-1), [1, seq_length, dim])
-    
+
     return pos_encoding
 
 
@@ -98,7 +100,7 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         self.dim = args.dim
         self.dim_ff = args.dim_ff
-        self.dim_key = args.dim_head # dim_head
+        self.dim_key = args.dim_head
         self.num_heads = args.num_heads
         self.dropout_rate = args.dropout_rate
 
@@ -261,7 +263,6 @@ class Transformer(tf.keras.Model):
         #output_seq_length = tf.shape(decoder_input)[1]
         pos_encoding_enc = positional_encoder(self.input_seq_length, self.dim)
         pos_encoding_dec = positional_encoder(self.output_seq_length, self.dim)
-        
         encoder_emb += pos_encoding_enc
         decoder_emb += pos_encoding_dec
         

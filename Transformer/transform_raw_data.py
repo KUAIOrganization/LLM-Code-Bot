@@ -22,15 +22,17 @@ class DatasetType(Enum):
           obj._value_ = value
           return obj
     
-    def __init__(self, raw_path: str, tokenized_path: str, max_length_input: int, max_length_output: int):
+    def __init__(self, raw_path: str, tokenized_path: str, max_length_input: int, max_length_output: int, reduced_length_input: int, reduced_length_output: int):
         self.raw_path = raw_path
         self.tokenized_path = tokenized_path
         self.max_length_input = max_length_input
         self.max_length_output = max_length_output
+        self.reduced_length_input = reduced_length_input
+        self.reduced_length_output = reduced_length_output
 
-    CODEFORCES_A = os.path.join("Training_Data", "CodeForces_A_difficulty"), os.path.join("Training_Data", "CodeForces_A_difficulty", "tokenized_padded_data.npz"), 643, 529
-    PROBLEM_SOLUTION_V3 = os.path.join("Training_Data", "ProblemSolutionV3", "ProblemSolutionV3.csv"), os.path.join("Training_Data", "ProblemSolutionV3", "tokenized_padded_data.npz"), 99, 1305
-    ALL = "", os.path.join("Training_Data", "All", "tokenized_padded_data.npz"), 643, 1305
+    CODEFORCES_A = os.path.join("Training_Data", "CodeForces_A_difficulty"), os.path.join("Training_Data", "CodeForces_A_difficulty", "tokenized_padded_data.npz"), 643, 529, 530, 180
+    PROBLEM_SOLUTION_V3 = os.path.join("Training_Data", "ProblemSolutionV3", "ProblemSolutionV3.csv"), os.path.join("Training_Data", "ProblemSolutionV3", "tokenized_padded_data.npz"), 99, 1305, 99, 180
+    ALL = "", os.path.join("Training_Data", "All", "tokenized_padded_data.npz"), 643, 1305, 530, 180
 
 
 class Dataset_Loader:
@@ -83,7 +85,7 @@ class Dataset_Loader:
         problems = self.tokenizer.tokenize_input(problems)
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
         
-        # Write data to a file
+        # Write to file
         self.write_file(problems, decoder_inputs, targets, os.path.join(self.root_path, DatasetType.CODEFORCES_A.tokenized_path))
 
     def load_ProblemSolutionV3(self):
@@ -105,11 +107,11 @@ class Dataset_Loader:
         problems = self.tokenizer.tokenize_input(problems)
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
-        # Write data to a file
+        # Write to file
         self.write_file(problems, decoder_inputs, targets, os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.tokenized_path))
     
     def load_All(self):
-        # Load the npz files and data tensors
+        # Load npz files and data tensors
         CodeForces_path = os.path.join(self.root_path, DatasetType.CODEFORCES_A.tokenized_path)
         ProblemSolutionV3_path = os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.tokenized_path)
         
@@ -122,7 +124,8 @@ class Dataset_Loader:
             self.output_dir = os.path.join(temp_parent_dir, "ProblemSolutionV3")
             self.load_ProblemSolutionV3()
         
-        cf_data = np.load(CodeForces_path) # Also pad them to the max length
+        # Pad to length of longest source
+        cf_data = np.load(CodeForces_path)
         cf_problems = pad_sequences(cf_data['problems'], padding='post', maxlen=self.dataset_type.max_length_input)
         cf_decoder_inputs = pad_sequences(cf_data['decoder_inputs'], padding='post', maxlen=self.dataset_type.max_length_output)
         cf_targets = pad_sequences(cf_data['targets'], padding='post', maxlen=self.dataset_type.max_length_output)
@@ -137,7 +140,7 @@ class Dataset_Loader:
         decoder_inputs = np.concatenate((cf_decoder_inputs, ps_decoder_inputs), axis=0)
         targets = np.concatenate((cf_targets, ps_targets), axis=0)
         
-        # Write data to a file
+        # Write to file
         self.write_file(problems, decoder_inputs, targets, DatasetType.ALL.tokenized_path)
     
     def write_file(self, problems, decoder_inputs, targets, output_file):

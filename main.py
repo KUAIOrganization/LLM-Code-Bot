@@ -12,7 +12,8 @@ from Transformer import ModelArgs, Loader, Transformer, build_and_compile, Datas
 
 
 def main():
-    base_dir = os.path.dirname(os.path.abspath(__file__)) # Does this point to /workspace when you run it?
+    # Use environment variable if set
+    base_dir = os.getenv('WORKSPACE_DIR', os.path.dirname(os.path.abspath(__file__)))
     base_log_dir = os.path.join(base_dir, "logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
     fit_log_dir = os.path.join(base_log_dir, "fit")
     debug_log_dir = os.path.join(base_log_dir, "debug")
@@ -32,8 +33,8 @@ def main():
     args = ModelArgs()
     
     # Initialize the Loader
-    dataset_choice = DatasetType.ALL # [All, CODEFORCES_A, PROBLEM_SOLUTION_V3]
-    loader = Loader(base_dir, dataset_choice, args)
+    dataset_choice = DatasetType.CODEFORCES_A # [All, CODEFORCES_A, PROBLEM_SOLUTION_V3]
+    loader = Loader(base_dir, dataset_choice, args, use_reduced_dataset = True)
     loader.create_dataset() # Do we need this the same?  Should it be changed?
     # ^ I would just either call this in the constructor, or have it be a standalone method.
     # I would do the standalone method because you aren't even passing the Loader object anywhere.
@@ -56,7 +57,7 @@ def main():
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fit_log_dir, histogram_freq=1)
     
     # Train the model
-    history = model.fit(loader.dataset, epochs=args.epochs, callbacks=[tensorboard_callback]) # history variable unused...
+    #history = model.fit(loader.dataset, epochs=args.epochs, callbacks=[tensorboard_callback]) # history variable unused...
     
     """
     Manual training setup
@@ -79,7 +80,7 @@ def main():
     
     # Save the model
     model_dir = os.path.join(base_dir, "Transformer", "model_files")
-    model.save(model_dir)
+    model.save(os.path.join(model_dir, "model.keras"))
 
 if __name__ == "__main__":
     main()
@@ -98,7 +99,8 @@ if __name__ == "__main__":
 
     #print(tf.sysconfig.get_build_info())
 
-    #tf.__version__
+    #print(tf.__version__)
+
     #!tensorboard --version
 
     #!pip install --upgrade tensorflow
