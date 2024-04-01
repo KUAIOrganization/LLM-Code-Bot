@@ -138,7 +138,7 @@ with open(f"{model_dir}/solution_tokenizer.pkl", 'rb') as f:
 evaluator = Evaluator(model, problem_tokenizer, solution_tokenizer, log_dir)
 
 
-evaluator.evaluate('loss', history)
+#evaluator.evaluate('loss', history) # Get history in main.py to work first
 evaluator.evaluate('token_prob', token_index=10, n_samples=3)
 evaluator.evaluate('training_sample_pred', n_samples=3)
 

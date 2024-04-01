@@ -15,7 +15,7 @@ class Tokenizers:
     def __init__(self):
         self.problem_tokenizer = Tokenizer(filters='', oov_token='UNK')
         self.solution_tokenizer = Tokenizer(filters='', oov_token='UNK')
-        # Also I would say to pass the SOS and EOS tokens as parameters. Probably have them have default values of "XXSOS" and "XXEOS" -C.
+        # Also I would say to pass the SOS and EOS tokens as parameters. Probably have them have default values of 'XXSOS' and 'XXEOS' -C.
     
     def tokenize_input(self, problems):
         # Fit Keras tokenizer
@@ -42,11 +42,11 @@ class Tokenizers:
             tokens = []
             for token in tokenize.generate_tokens(io.StringIO(solution).readline): # generate_tokens only takes readlines
                 tokens.append(token.string)
-            decoder_inputs.append(["XXSOS"] + tokens)
-            targets.append(tokens + ["XXEOS"])
+            decoder_inputs.append(['XXSOS'] + tokens)
+            targets.append(tokens + ['XXEOS'])
         
         # Fit Keras tokenizer and tokenize
-        self.solution_tokenizer.fit_on_texts(decoder_inputs + [["XXEOS"]]) # Both at once
+        self.solution_tokenizer.fit_on_texts(decoder_inputs + [['XXEOS']]) # Both at once
         decoder_inputs = self.solution_tokenizer.texts_to_sequences(decoder_inputs)
         targets = self.solution_tokenizer.texts_to_sequences(targets)
         

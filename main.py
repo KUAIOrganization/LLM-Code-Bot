@@ -8,17 +8,17 @@ import os
 import tensorflow as tf
 import pickle
 
-from Transformer import ModelArgs, Loader, Transformer, build_and_compile, DatasetType
+from Transformer import ModelArgs, Dataset_Generator, build_and_compile, Codeforces_A, Problem_Solution, All
 
 
 def main():
     # Use environment variable if set
     base_dir = os.getenv('WORKSPACE_DIR', os.path.dirname(os.path.abspath(__file__)))
-    base_log_dir = os.path.join(base_dir, "logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
-    fit_log_dir = os.path.join(base_log_dir, "fit")
-    debug_log_dir = os.path.join(base_log_dir, "debug")
+    base_log_dir = os.path.join(base_dir, 'logs', 'run_' + datetime.datetime.now().strftime('%m_%d_%H_%M'))
+    fit_log_dir = os.path.join(base_log_dir, 'fit')
+    debug_log_dir = os.path.join(base_log_dir, 'debug')
 
-    """
+    """Enable full debugging
     # Enable full debugging
     #tf.config.optimizer.set_jit(False)  # Disable XLA compilation
     tf.config.run_functions_eagerly(True)
@@ -32,14 +32,19 @@ def main():
     
     args = ModelArgs()
     
-    # Initialize the Loader
-    dataset_choice = DatasetType.CODEFORCES_A # [All, CODEFORCES_A, PROBLEM_SOLUTION_V3]
-    loader = Loader(base_dir, dataset_choice, args, use_reduced_dataset = True)
-    loader.create_dataset() # Do we need this the same?  Should it be changed?
-    # ^ I would just either call this in the constructor, or have it be a standalone method.
-    # I would do the standalone method because you aren't even passing the Loader object anywhere.
-    # You make it, use its method to make the dataset, and then pass the dataset (not the loader) to the model.
-    # The loader only serves as a container for the method. -C.
+    # Generate the dataset
+    dataset_choice = Problem_Solution # [All, Codeforces_A, Problem_Solution]
+    reduced = True # If you want to use a small dataset
+
+    args.input_seq_length = dataset_choice.reduced_length_input if reduced else dataset_choice.max_length_input
+    args.output_seq_length = dataset_choice.reduced_length_output if reduced else dataset_choice.max_length_output # No assertion needed?
+    
+    if not os.path.exists(dataset_choice.tokenized_path):
+        generator = Dataset_Generator(base_dir)
+        load_function = generator.get_load_function(dataset_choice)
+        load_function()
+
+    dataset_choice.create_dataset(args.batch_size, reduced)
     
     # Load tokenizer information
     with open('Transformer/model_files/problem_tokenizer.pkl', 'rb') as f:
@@ -57,11 +62,9 @@ def main():
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fit_log_dir, histogram_freq=1)
     
     # Train the model
-    #history = model.fit(loader.dataset, epochs=args.epochs, callbacks=[tensorboard_callback]) # history variable unused...
+    history = model.fit(dataset_choice.dataset, epochs=args.epochs, callbacks=[tensorboard_callback]) # history variable unused...
     
-    """
-    Manual training setup
-    
+    """Manual training setup
     optimizer = model.optimizer
     for epoch in range(epochs):
         print(f"Start of Epoch {epoch+1}")
@@ -82,7 +85,9 @@ def main():
     model_dir = os.path.join(base_dir, "Transformer", "model_files")
     model.save(os.path.join(model_dir, "model.keras"))
 
-if __name__ == "__main__":
+if __name__ == '__main__':
+    """Miscellaneous functions to run
+    """
     main()
 
     #print(len(loader.problem_tokenizer.word_index) + 1)
@@ -101,7 +106,8 @@ if __name__ == "__main__":
 
     #print(tf.__version__)
 
-    #!tensorboard --version
+    #print(tf.sysconfig.get_build_info()["cuda_version"])
+    #print(tf.sysconfig.get_build_info()["cudnn_version"])
 
     #!pip install --upgrade tensorflow
     #!pip install --upgrade tensorboard

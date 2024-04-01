@@ -2,14 +2,9 @@
 # coding: utf-8
 
 
-import datetime
-import os
 from dataclasses import dataclass
 
 import tensorflow as tf
-import numpy as np
-
-from .transform_raw_data import Dataset_Loader, DatasetType
 
 
 @dataclass
@@ -32,49 +27,6 @@ class ModelArgs:
     epochs: int = 2
 
 
-class Loader:
-    def __init__(self, root_path: str, dataset_type: DatasetType, args: ModelArgs, use_reduced_dataset: bool):
-        args.input_seq_length = dataset_type.reduced_length_input if use_reduced_dataset else dataset_type.max_length_input
-        args.output_seq_length = dataset_type.reduced_length_output if use_reduced_dataset else dataset_type.max_length_output
-
-        self.batch_size = args.batch_size
-        self.input_seq_length = args.input_seq_length
-        self.output_seq_length = args.output_seq_length
-
-        self.dataset_type = dataset_type
-        self.root_path = root_path
-        self.dataset = None
-
-    def create_dataset(self):
-        # Load/generate npz
-        if not os.path.exists(self.dataset_type.tokenized_path):
-            loader = Dataset_Loader(self.root_path, self.dataset_type)
-            loader.load_data()
-        
-        data = np.load(self.dataset_type.tokenized_path)
-        problems_all = data['problems'][:]
-        decoder_inputs_all = data['decoder_inputs']
-        targets_all = data['targets']
-
-        # Only add problems with length < input_seq_length for time complexity
-        assert self.input_seq_length <= len(problems_all[0]), "ModelArgs input_seq_length is larger than actual data length"
-        assert self.output_seq_length <= len(targets_all[0]), "ModelArgs output_seq_length is larger than actual data length"
-
-        short_problem_indices = np.where(problems_all[:, self.input_seq_length - 1] == 0)[0]
-        short_target_indices = np.where(targets_all[:, self.output_seq_length - 1] == 0)[0]
-        indices = np.intersect1d(short_problem_indices, short_target_indices) # Where both conditions are met
-        
-        problems = problems_all[indices][:, :self.input_seq_length]
-        decoder_inputs = decoder_inputs_all[indices][:, :self.output_seq_length]
-        targets = targets_all[indices][:, :self.output_seq_length]
-
-        # Create the dataset
-        self.dataset = tf.data.Dataset.from_tensor_slices(((problems, decoder_inputs), targets))
-        self.dataset.shuffle(buffer_size=1024).batch(self.batch_size).prefetch(buffer_size=tf.data.AUTOTUNE)
-        
-        return self.dataset
-
-
 def positional_encoder(seq_length, dim):
     # Generate positions for each element
     positions = tf.range(seq_length, dtype=tf.float32)[..., tf.newaxis]
@@ -95,7 +47,7 @@ def positional_encoder(seq_length, dim):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name="EncoderLayer"):
+    def __init__(self, args: ModelArgs, name='EncoderLayer'):
         super(EncoderLayer, self).__init__(name=name)
 
         self.dim = args.dim
@@ -109,14 +61,14 @@ class EncoderLayer(tf.keras.layers.Layer):
 
         # Feed-Forward Network Layers
         self.ffn = tf.keras.Sequential([
-            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name="encoder_ffn_dense1"), 
+            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='encoder_ffn_dense1'), 
             tf.keras.layers.LeakyReLU(alpha=0.01), # Trying LeakyReLu
-            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name="encoder_ffn_dense2")
-        ], name="encoder_ffn")
+            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='encoder_ffn_dense2')
+        ], name='encoder_ffn')
 
         # Normalization Layers
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="encoder_layernorm1")
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="encoder_layernorm2")
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='encoder_layernorm1')
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='encoder_layernorm2')
 
         # Dropout
         self.dropout_mha = tf.keras.layers.Dropout(self.dropout_rate)
@@ -139,24 +91,24 @@ class EncoderLayer(tf.keras.layers.Layer):
         config = super(EncoderLayer, self).get_config()
         mha_config = self.mha.get_config()
         config.update({
-            "dim": self.ffn.layers[2].units, 
-            "dim_ff": self.ffn.layers[0].units, 
-            "num_heads": mha_config['num_heads'], 
-            "key_dim": mha_config['key_dim'], 
-            "dropout_rate": self.dropout_mha.rate
+            'dim': self.ffn.layers[2].units, 
+            'dim_ff': self.ffn.layers[0].units, 
+            'num_heads': mha_config['num_heads'], 
+            'key_dim': mha_config['key_dim'], 
+            'dropout_rate': self.dropout_mha.rate
         })
         return config
 
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name="DecoderLayer"):
+    def __init__(self, args: ModelArgs, name='DecoderLayer'):
         super(DecoderLayer, self).__init__(name=name)
         
         self.dim = args.dim
         self.dim_ff = args.dim_ff
         self.dropout_rate = args.dropout_rate
         self.num_heads = args.num_heads
-        self.dim_key = args.dim_head # dim_head
+        self.dim_key = args.dim_head # head = key
 
         # Self-Attention and Cross-Attention layers
         self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
@@ -164,15 +116,15 @@ class DecoderLayer(tf.keras.layers.Layer):
         
         # Feed Forward Network Layers
         self.ffn = tf.keras.Sequential([
-            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name="decoder_ffn_dense1"), 
+            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='decoder_ffn_dense1'), 
             tf.keras.layers.LeakyReLU(alpha=0.01), # Trying LeakyReLu
-            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name="decoder_ffn_dense2")
-        ], name="decoder_ffn")
+            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='decoder_ffn_dense2')
+        ], name='decoder_ffn')
         
         # Normalization Layers
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="decoder_layernorm1")
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="decoder_layernorm2")
-        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="decoder_layernorm3")
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm1')
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm2')
+        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm3')
         
         # Dropout
         self.dropout_self_attn = tf.keras.layers.Dropout(self.dropout_rate)
@@ -211,10 +163,10 @@ class DecoderLayer(tf.keras.layers.Layer):
 
 
 class TransformerEncoder(tf.keras.layers.Layer):
-    def __init__(self, args, name="TransformerEncoder"):
+    def __init__(self, args, name='TransformerEncoder'):
         super(TransformerEncoder, self).__init__(name=name)
         self.num_layers = args.num_layers
-        self.enc_layers = [EncoderLayer(args, name=f"encoder_layer_{i}") for i in range(self.num_layers)]
+        self.enc_layers = [EncoderLayer(args, name=f'encoder_layer_{i}') for i in range(self.num_layers)]
 
     def call(self, x: tf.Tensor, training=False) -> tf.Tensor:
         for layer in self.enc_layers:
@@ -223,10 +175,10 @@ class TransformerEncoder(tf.keras.layers.Layer):
 
 
 class TransformerDecoder(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name="TransformerDecoder"):
+    def __init__(self, args: ModelArgs, name='TransformerDecoder'):
         super(TransformerDecoder, self).__init__(name=name)
         self.num_layers = args.num_layers
-        self.dec_layers = [DecoderLayer(args, name=f"decoder_layer_{i}") for i in range(self.num_layers)]
+        self.dec_layers = [DecoderLayer(args, name=f'decoder_layer_{i}') for i in range(self.num_layers)]
 
     def call(self, x: tf.Tensor, enc_output: tf.Tensor, training=False) -> tf.Tensor:
         for layer in self.dec_layers:
@@ -248,10 +200,10 @@ class Transformer(tf.keras.Model):
         self.problem_embedding_layer = tf.keras.layers.Embedding(self.problem_vocab_size, self.dim, mask_zero=True)
         self.solution_embedding_layer = tf.keras.layers.Embedding(self.solution_vocab_size, self.dim, mask_zero=True)
 
-        self.encoder = TransformerEncoder(args, name="encoder")
-        self.decoder = TransformerDecoder(args, name="decoder")
+        self.encoder = TransformerEncoder(args, name='encoder')
+        self.decoder = TransformerDecoder(args, name='decoder')
 
-        self.final_layer = tf.keras.layers.Dense(self.solution_vocab_size, name="output_layer")
+        self.final_layer = tf.keras.layers.Dense(self.solution_vocab_size, name='output_layer')
 
     def call(self, encoder_input, decoder_input, training=False):
         # Embed input sequences
@@ -298,7 +250,6 @@ def build_and_compile(args: ModelArgs):
     )
 
     return model
-
 
 def calculate_loss(model_output, tokenized_code, mask):
     loss = tf.keras.losses.sparse_categorical_crossentropy(tokenized_code, model_output, from_logits=True)

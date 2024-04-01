@@ -5,55 +5,37 @@
 import datetime
 import json
 import os
-from enum import Enum
 
 import glob
 import numpy as np
 import pandas as pd
 import re
 
+from .dataset import Dataset, Codeforces_A, Problem_Solution, All # Import all datasets
 from .tokenizer import Tokenizers
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
-class DatasetType(Enum):
-    def __new__(cls, *args, **kwds):
-          value = len(cls.__members__) + 1
-          obj = object.__new__(cls)
-          obj._value_ = value
-          return obj
-    
-    def __init__(self, raw_path: str, tokenized_path: str, max_length_input: int, max_length_output: int, reduced_length_input: int, reduced_length_output: int):
-        self.raw_path = raw_path
-        self.tokenized_path = tokenized_path
-        self.max_length_input = max_length_input
-        self.max_length_output = max_length_output
-        self.reduced_length_input = reduced_length_input
-        self.reduced_length_output = reduced_length_output
 
-    CODEFORCES_A = os.path.join("Training_Data", "CodeForces_A_difficulty"), os.path.join("Training_Data", "CodeForces_A_difficulty", "tokenized_padded_data.npz"), 643, 529, 530, 180
-    PROBLEM_SOLUTION_V3 = os.path.join("Training_Data", "ProblemSolutionV3", "ProblemSolutionV3.csv"), os.path.join("Training_Data", "ProblemSolutionV3", "tokenized_padded_data.npz"), 99, 1305, 99, 180
-    ALL = "", os.path.join("Training_Data", "All", "tokenized_padded_data.npz"), 643, 1305, 530, 180
-
-
-class Dataset_Loader:
-    def __init__(self, root_path: str, dataset_type: DatasetType):
-        self.loader_log_dir = os.path.join(root_path, "logs" + datetime.datetime.now().strftime("%m_%d_%H_%M"), "loader")
-        self.root_path = root_path
-        self.output_dir = os.path.join(root_path, dataset_type.tokenized_path)
-        self.dataset_type = dataset_type
+class Dataset_Generator:
+    def __init__(self, base_dir: str):
+        self.base_dir = base_dir
+        self.loader_log_dir = os.path.join(self.base_dir, 'logs' + datetime.datetime.now().strftime('%m_%d_%H_%M'), 'loader')
 
         self.tokenizer = Tokenizers()
     
-    def load_CodeForces_A_difficulty(self):
+    def get_load_function(self, dataset):
+        return getattr(self, 'load_' + dataset.name)
+
+    def load_Codeforces_A(self):
         # Load problems
-        problems_path = os.path.join(self.root_path, DatasetType.CODEFORCES_A.raw_path, "A_problems.json")
+        problems_path = os.path.join(self.base_dir, Codeforces_A.raw_path, 'A_problems.json')
         with open(problems_path, 'r') as problems_file:
             problems_list = json.load(problems_file)
-        raw_problems = {}
 
+        raw_problems = {}
         for problem in problems_list:
             problem_id = problem['problem_id']
-            concatenated_problem = "XXSTATEMENT {} XXINPUT {} XXOUTPUT {} XXNOTES {} XXEXAMPLES {}".format(
+            concatenated_problem = 'XXSTATEMENT {} XXINPUT {} XXOUTPUT {} XXNOTES {} XXEXAMPLES {}'.format(
                 problem.get('problem_statement', ''),
                 problem.get('problem_input', ''),
                 problem.get('problem_output', ''),
@@ -63,13 +45,13 @@ class Dataset_Loader:
             raw_problems[problem_id] = concatenated_problem
 
         # Load solutions
-        submissions_dir = os.path.join(self.root_path, DatasetType.CODEFORCES_A.raw_path, "A_submissions")
+        submissions_dir = os.path.join(self.base_dir, Codeforces_A.raw_path, 'A_submissions')
         raw_solutions = [[] for _ in range(2000)] # Up to 2000 problem question indices | I would have this (2000) be a static variable at the top of the class -C.
-        submissions = glob.glob(os.path.join(submissions_dir, "*.py"))
+        submissions = glob.glob(os.path.join(submissions_dir, '*.py'))
 
         for submission_path in submissions:
             problem_number = int(re.findall(r'^\d+', os.path.basename(submission_path))[0])
-            with open(submission_path, "r") as submission:
+            with open(submission_path, 'r') as submission:
                 raw_solutions[problem_number].append(submission.read())
 
         # Combine problems and solutions
@@ -86,17 +68,16 @@ class Dataset_Loader:
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
         
         # Write to file
-        self.write_file(problems, decoder_inputs, targets, os.path.join(self.root_path, DatasetType.CODEFORCES_A.tokenized_path))
+        Codeforces_A.write_tfrecord(problems, decoder_inputs, targets, False)
+        Codeforces_A.write_tfrecord(problems, decoder_inputs, targets, True) # Reduced = True
 
-    def load_ProblemSolutionV3(self):
-        problems_path = os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.raw_path)
+    def load_Problem_Solution(self):
+        problems_path = os.path.join(self.base_dir, Problem_Solution.raw_path, 'Problem_Solution.csv')
         df = pd.read_csv(problems_path, encoding_errors='ignore')
 
-        # Initialize problems and solutions lists
         problems = []
         solutions = []
 
-        # Iterate over the DataFrame rows
         for index, row in df.iterrows():
             problem = row['Problem']
             solution = row['Python Code']
@@ -108,32 +89,26 @@ class Dataset_Loader:
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
         # Write to file
-        self.write_file(problems, decoder_inputs, targets, os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.tokenized_path))
+        Problem_Solution.write_tfrecord(problems, decoder_inputs, targets, False)
+        Problem_Solution.write_tfrecord(problems, decoder_inputs, targets, True) # Reduced = True
     
     def load_All(self):
-        # Load npz files and data tensors
-        CodeForces_path = os.path.join(self.root_path, DatasetType.CODEFORCES_A.tokenized_path)
-        ProblemSolutionV3_path = os.path.join(self.root_path, DatasetType.PROBLEM_SOLUTION_V3.tokenized_path)
-        
-        if not os.path.exists(CodeForces_path):
-            temp_parent_dir = os.path.abspath(os.path.join(self.output_dir, os.pardir))
-            self.output_dir = os.path.join(temp_parent_dir, "CodeForces_A_difficulty")
-            self.load_CodeForces_A_difficulty()
-        if not os.path.exists(ProblemSolutionV3_path):
-            temp_parent_dir = os.path.abspath(os.path.join(self.output_dir, os.pardir))
-            self.output_dir = os.path.join(temp_parent_dir, "ProblemSolutionV3")
-            self.load_ProblemSolutionV3()
+        # Generate datasets if they don't exist
+        for dataset in Dataset.registry:
+            if not os.path.exists(dataset.tokenized_path):
+               load_function = self.get_load_function(dataset)
+               load_function(dataset)
         
         # Pad to length of longest source
-        cf_data = np.load(CodeForces_path)
-        cf_problems = pad_sequences(cf_data['problems'], padding='post', maxlen=self.dataset_type.max_length_input)
-        cf_decoder_inputs = pad_sequences(cf_data['decoder_inputs'], padding='post', maxlen=self.dataset_type.max_length_output)
-        cf_targets = pad_sequences(cf_data['targets'], padding='post', maxlen=self.dataset_type.max_length_output)
+        cf_data = np.load(Codeforces_A.tokenized_path)
+        cf_problems = pad_sequences(cf_data['problems'], padding='post', maxlen=Codeforces_A.max_length_input)
+        cf_decoder_inputs = pad_sequences(cf_data['decoder_inputs'], padding='post', maxlen=Codeforces_A.max_length_output)
+        cf_targets = pad_sequences(cf_data['targets'], padding='post', maxlen=Codeforces_A.max_length_output)
 
-        ps_data = np.load(ProblemSolutionV3_path)
-        ps_problems = pad_sequences(ps_data['problems'], padding='post', maxlen=self.dataset_type.max_length_input)
-        ps_decoder_inputs = pad_sequences(ps_data['decoder_inputs'], padding='post', maxlen=self.dataset_type.max_length_output)
-        ps_targets = pad_sequences(ps_data['targets'], padding='post', maxlen=self.dataset_type.max_length_output)
+        ps_data = np.load(Problem_Solution.tokenized_path)
+        ps_problems = pad_sequences(ps_data['problems'], padding='post', maxlen=Problem_Solution.max_length_input)
+        ps_decoder_inputs = pad_sequences(ps_data['decoder_inputs'], padding='post', maxlen=Problem_Solution.max_length_output)
+        ps_targets = pad_sequences(ps_data['targets'], padding='post', maxlen=Problem_Solution.max_length_output)
 
         # Concatenate the different data sources
         problems = np.concatenate((cf_problems, ps_problems), axis=0)
@@ -141,22 +116,5 @@ class Dataset_Loader:
         targets = np.concatenate((cf_targets, ps_targets), axis=0)
         
         # Write to file
-        self.write_file(problems, decoder_inputs, targets, DatasetType.ALL.tokenized_path)
-    
-    def write_file(self, problems, decoder_inputs, targets, output_file):
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        np.savez_compressed(output_file, problems=problems, decoder_inputs=decoder_inputs, targets=targets)
-        
-    def load_data(self):
-        match self.dataset_type:
-            case DatasetType.CODEFORCES_A:
-                self.load_CodeForces_A_difficulty()
-
-            case DatasetType.PROBLEM_SOLUTION_V3:
-                self.load_ProblemSolutionV3()
-
-            case DatasetType.ALL:
-                self.load_All()
-
-            case _:
-                "Invalid dataset"
+        All.write_tfrecord(problems, decoder_inputs, targets, False)
+        All.write_tfrecord(problems, decoder_inputs, targets, True) # Reduced = True

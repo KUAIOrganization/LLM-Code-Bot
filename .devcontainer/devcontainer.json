@@ -1,7 +1,13 @@
 // .devcontainer/devcontainer.json
 {
     "name": "CodeLM",
-    "image": "slm_docker:v3",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".",
+        "args": {
+            // None
+        }
+    },
     "runArgs": [
         "--gpus", "all",
         "--shm-size=1g",
@@ -10,7 +16,7 @@
         "--net=host"
     ],
     "workspaceFolder": "/workspace",
-    "workspaceMount": "source=C:\\\\Program Files\\\\Coding Programs\\\\GitHub\\\\LLM-Code-Bot,target=/workspace,type=bind,consistency=cached",
+    "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
     "customizations": {
         "vscode": {
             "settings": { 
