@@ -22,7 +22,7 @@ class Dataset:
     
     def set_schema(self, reduced):
         self.schema = {
-            'problem': tf.io.FixedLenFeature([self.reduced_length_input if reduced else self.max_length_input], tf.int64),
+            'encoder_input': tf.io.FixedLenFeature([self.reduced_length_input if reduced else self.max_length_input], tf.int64),
             'decoder_input': tf.io.FixedLenFeature([self.reduced_length_output if reduced else self.max_length_output], tf.int64),
             'target': tf.io.FixedLenFeature([self.reduced_length_output if reduced else self.max_length_output], tf.int64),
         }
@@ -30,17 +30,17 @@ class Dataset:
     def parse_tfrecord(self, example):
         # Parse single example
         return tf.io.parse_single_example(example, self.schema)
-    
-    def write_tfrecord(self, problems, decoder_inputs, targets, reduced: bool):
-        with tf.io.TFRecordWriter(self.reduced_path if reduced else self.tokenized_path) as writer: 
-            for problem, decoder_input, target in zip(problems, decoder_inputs, targets):
+
+    def write_tfrecord(self, encoder_inputs, decoder_inputs, targets, reduced: bool):
+        with tf.io.TFRecordWriter(self.reduced_path if reduced else self.tokenized_path) as writer:
+            for encoder_input, decoder_input, target in zip(encoder_inputs, decoder_inputs, targets):
                 # Skip sequences longer than the reduced limits
-                if reduced and (problem[self.reduced_length_input] or target[self.reduced_length_output]):
+                if reduced and (encoder_input[self.reduced_length_input] or target[self.reduced_length_output]):
                     continue
 
                 # Serialize the example
                 example = tf.train.Example(features=tf.train.Features(feature={
-                    'problem': tf.train.Feature(int64_list=tf.train.Int64List(value=problem)),
+                    'encoder_input': tf.train.Feature(int64_list=tf.train.Int64List(value=encoder_input)),
                     'decoder_input': tf.train.Feature(int64_list=tf.train.Int64List(value=decoder_input)),
                     'target': tf.train.Feature(int64_list=tf.train.Int64List(value=target)),
                 }))
@@ -49,16 +49,16 @@ class Dataset:
     def create_dataset(self, batch_size, reduced):
         self.set_schema(reduced) # Set schema
 
-        # Load and parse tfrecord into problems, decoder_inputs, targets
-        raw_dataset = tf.data.TFRecordDataset(self.tokenized_path)
+        # Load and parse tfrecord into encoder_inputs, decoder_inputs, targets
+        raw_dataset = tf.data.TFRecordDataset(self.reduced_path if reduced else self.tokenized_path)
         parsed_dataset = raw_dataset.map(lambda x: self.parse_tfrecord(x)) # Calls self.parse_tfrecord()
 
         def map_to_model_inputs(parsed_example):
-            # Maps to the model's expected tuple form of just two tensors, ['encoder_input', 'decoder_input']
-            return ({
-                'encoder_input': parsed_example['problem'],
+            # Maps to form ['encoder_input', 'decoder_input']
+            return (({
+                'encoder_input': parsed_example['encoder_input'],
                 'decoder_input': parsed_example['decoder_input']
-            }, parsed_example['target'])
+            }), parsed_example['target'])
     
         self.dataset = parsed_dataset.map(map_to_model_inputs)
         self.dataset.shuffle(buffer_size=1024).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE) # Buffer size?
@@ -77,5 +77,8 @@ Problem_Solution = Dataset(
 
 All = Dataset(
     'All',
-    643, 530, 1305, 200
+    max([dataset.max_length_input for dataset in Dataset.registry]), 
+    max([dataset.reduced_length_input for dataset in Dataset.registry]),
+    max([dataset.max_length_output for dataset in Dataset.registry]),
+    max([dataset.reduced_length_output for dataset in Dataset.registry])
 )

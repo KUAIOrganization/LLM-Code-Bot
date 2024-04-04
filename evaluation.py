@@ -144,3 +144,15 @@ evaluator.evaluate('training_sample_pred', n_samples=3)
 
 input_text = "Print the numbers 1-9"
 evaluator.evaluate('manual_sample_pred', input_text)
+
+"""
+For printing during dataset creation:
+                if i%100 == 0:
+                    print(example.features.feature['problem'].int64_list.value[:15],
+                          example.features.feature['decoder_input'].int64_list.value[:15],
+                          example.features.feature['target'].int64_list.value[:15])
+                i += 1
+                
+For printing after raw -> parse:
+
+"""

@@ -64,12 +64,19 @@ class Dataset_Generator:
                     solutions.append(solution)
 
         # Tokenize and pad
-        problems = self.tokenizer.tokenize_input(problems)
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
         
+        try:
+            assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
+            assert all(len(decoder_inputs[0]) == len(seq) for seq in decoder_inputs), "Decoder inputs sequence lengths mismatch."
+            assert all(len(targets[0]) == len(seq) for seq in targets), "Targets sequence lengths mismatch."
+        except AssertionError as e:
+            print(f"Discrepancy found in CodeForces_A sequence lengths: {e}")
+
         # Write to file
-        Codeforces_A.write_tfrecord(problems, decoder_inputs, targets, False)
-        Codeforces_A.write_tfrecord(problems, decoder_inputs, targets, True) # Reduced = True
+        Codeforces_A.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
+        Codeforces_A.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
 
     def load_Problem_Solution(self):
         problems_path = os.path.join(self.base_dir, Problem_Solution.raw_path, 'Problem_Solution.csv')
@@ -85,12 +92,19 @@ class Dataset_Generator:
             solutions.append(solution)
 
         # Tokenize and pad
-        problems = self.tokenizer.tokenize_input(problems)
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
+        try:
+            assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
+            assert all(len(decoder_inputs[0]) == len(seq) for seq in decoder_inputs), "Decoder inputs sequence lengths mismatch."
+            assert all(len(targets[0]) == len(seq) for seq in targets), "Targets sequence lengths mismatch."
+        except AssertionError as e:
+            print(f"Discrepancy found in Problem_Solution sequence lengths: {e}")
+
         # Write to file
-        Problem_Solution.write_tfrecord(problems, decoder_inputs, targets, False)
-        Problem_Solution.write_tfrecord(problems, decoder_inputs, targets, True) # Reduced = True
+        Problem_Solution.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
+        Problem_Solution.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
     
     def load_All(self):
         # Generate datasets if they don't exist
@@ -101,20 +115,20 @@ class Dataset_Generator:
         
         # Pad to length of longest source
         cf_data = np.load(Codeforces_A.tokenized_path)
-        cf_problems = pad_sequences(cf_data['problems'], padding='post', maxlen=Codeforces_A.max_length_input)
+        cf_encoder_inputs = pad_sequences(cf_data['encoder_inputs'], padding='post', maxlen=Codeforces_A.max_length_input)
         cf_decoder_inputs = pad_sequences(cf_data['decoder_inputs'], padding='post', maxlen=Codeforces_A.max_length_output)
         cf_targets = pad_sequences(cf_data['targets'], padding='post', maxlen=Codeforces_A.max_length_output)
 
         ps_data = np.load(Problem_Solution.tokenized_path)
-        ps_problems = pad_sequences(ps_data['problems'], padding='post', maxlen=Problem_Solution.max_length_input)
+        ps_encoder_inputs = pad_sequences(ps_data['encoder_inputs'], padding='post', maxlen=Problem_Solution.max_length_input)
         ps_decoder_inputs = pad_sequences(ps_data['decoder_inputs'], padding='post', maxlen=Problem_Solution.max_length_output)
         ps_targets = pad_sequences(ps_data['targets'], padding='post', maxlen=Problem_Solution.max_length_output)
 
         # Concatenate the different data sources
-        problems = np.concatenate((cf_problems, ps_problems), axis=0)
+        encoder_inputs = np.concatenate((cf_encoder_inputs, ps_encoder_inputs), axis=0)
         decoder_inputs = np.concatenate((cf_decoder_inputs, ps_decoder_inputs), axis=0)
         targets = np.concatenate((cf_targets, ps_targets), axis=0)
         
         # Write to file
-        All.write_tfrecord(problems, decoder_inputs, targets, False)
-        All.write_tfrecord(problems, decoder_inputs, targets, True) # Reduced = True
+        All.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
+        All.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True

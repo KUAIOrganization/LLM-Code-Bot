@@ -229,8 +229,8 @@ class Transformer(tf.keras.Model):
 
 def build_and_compile(args: ModelArgs):
     # Define model inputs
-    encoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='encoder_input')
-    decoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='decoder_input')
+    encoder_input = tf.keras.Input(shape=(None,), dtype='int64', name='encoder_input')
+    decoder_input = tf.keras.Input(shape=(None,), dtype='int64', name='decoder_input')
 
     # Initialize and call the Transformer
     transformer = Transformer(args)

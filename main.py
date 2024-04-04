@@ -37,7 +37,7 @@ def main():
     reduced = True # If you want to use a small dataset
 
     args.input_seq_length = dataset_choice.reduced_length_input if reduced else dataset_choice.max_length_input
-    args.output_seq_length = dataset_choice.reduced_length_output if reduced else dataset_choice.max_length_output # No assertion needed?
+    args.output_seq_length = dataset_choice.reduced_length_output if reduced else dataset_choice.max_length_output
     
     if not os.path.exists(dataset_choice.tokenized_path):
         generator = Dataset_Generator(base_dir)
@@ -88,6 +88,10 @@ def main():
 if __name__ == '__main__':
     """Miscellaneous functions to run
     """
+    #tf.config.run_functions_eagerly(True)
+    #tf.data.experimental.enable_debug_mode()
+    #tf.executing_eagerly()
+
     main()
 
     #print(len(loader.problem_tokenizer.word_index) + 1)
@@ -111,6 +115,3 @@ if __name__ == '__main__':
 
     #!pip install --upgrade tensorflow
     #!pip install --upgrade tensorboard
-
-    #f.config.run_functions_eagerly(False)
-    #f.executing_eagerly()
