@@ -28,7 +28,6 @@ class Dataset:
         }
 
     def parse_tfrecord(self, example):
-        # Parse single example
         return tf.io.parse_single_example(example, self.schema)
 
     def write_tfrecord(self, encoder_inputs, decoder_inputs, targets, reduced: bool):
@@ -37,13 +36,18 @@ class Dataset:
                 # Skip sequences longer than the reduced limits
                 if reduced and (encoder_input[self.reduced_length_input] or target[self.reduced_length_output]):
                     continue
-
+                else:
+                    encoder_input = encoder_input[:self.reduced_length_input]
+                    decoder_input = decoder_input[:self.reduced_length_output]
+                    target = target[:self.reduced_length_output]
+                
                 # Serialize the example
                 example = tf.train.Example(features=tf.train.Features(feature={
                     'encoder_input': tf.train.Feature(int64_list=tf.train.Int64List(value=encoder_input)),
                     'decoder_input': tf.train.Feature(int64_list=tf.train.Int64List(value=decoder_input)),
                     'target': tf.train.Feature(int64_list=tf.train.Int64List(value=target)),
                 }))
+
                 writer.write(example.SerializeToString())
 
     def create_dataset(self, batch_size, reduced):
@@ -55,15 +59,18 @@ class Dataset:
 
         def map_to_model_inputs(parsed_example):
             # Maps to form ['encoder_input', 'decoder_input']
-            return (({
+            # To tuple or not to tuple
+            return ((
+                parsed_example['encoder_input'],
+                parsed_example['decoder_input']
+            ), parsed_example['target'])
+            return ({
                 'encoder_input': parsed_example['encoder_input'],
                 'decoder_input': parsed_example['decoder_input']
-            }), parsed_example['target'])
+            }, parsed_example['target'])
     
         self.dataset = parsed_dataset.map(map_to_model_inputs)
-        self.dataset.shuffle(buffer_size=1024).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE) # Buffer size?
-
-        #return self.dataset
+        self.dataset = self.dataset.shuffle(buffer_size=1024).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE) # Buffer size?
 
 Codeforces_A = Dataset(
     'Codeforces_A',

@@ -10,6 +10,8 @@ import pickle
 
 from Transformer import ModelArgs, Dataset_Generator, build_and_compile, Codeforces_A, Problem_Solution, All
 
+#from tensorflow.python.framework.ops import disable_eager_execution
+#disable_eager_execution()
 
 def main():
     # Use environment variable if set
@@ -45,7 +47,7 @@ def main():
         load_function()
 
     dataset_choice.create_dataset(args.batch_size, reduced)
-    
+
     # Load tokenizer information
     with open('Transformer/model_files/problem_tokenizer.pkl', 'rb') as f:
         problem_tokenizer = pickle.load(f)
@@ -54,7 +56,7 @@ def main():
     with open('Transformer/model_files/solution_tokenizer.pkl', 'rb') as f:
         solution_tokenizer = pickle.load(f)
         args.solution_vocab_size = len(solution_tokenizer.word_index) + 1
-    
+
     # Build the model
     model = build_and_compile(args)
     
@@ -86,8 +88,6 @@ if __name__ == '__main__':
     #tf.debugging.experimental.disable_dump_debug_info()
 
     #!kill 415
-
-    #print("hello")
 
     #print(tf.sysconfig.get_build_info())
 

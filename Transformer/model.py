@@ -9,7 +9,7 @@ import tensorflow as tf
 
 @dataclass
 class ModelArgs:
-    dim: int = 512
+    dim: int = 256
     dim_ff = dim * 4
     num_layers: int = 6
     num_heads: int = 4
@@ -24,7 +24,7 @@ class ModelArgs:
     learning_rate: float = 1e-4
     dropout_rate: float = 0.0 # Not used
     
-    epochs: int = 2
+    epochs: int = 1
 
 
 def positional_encoder(seq_length, dim):
@@ -206,13 +206,13 @@ class Transformer(tf.keras.Model):
         self.final_layer = tf.keras.layers.Dense(self.solution_vocab_size, name='output_layer')
 
     def train_step(self, data):
-        (tokenized_question, tokenized_code), target = data
+        (encoder_input, decoder_input), target = data
 
         with tf.GradientTape() as tape:
-            predictions = self((tokenized_question, tokenized_code[:, :-1]), training=True)
+            predictions = self((encoder_input, decoder_input[:, :-1]), training=True)
             
             # Mask PAD tokens
-            mask = tf.cast(tf.math.logical_not(tf.math.equal(tokenized_code[:, :-1], 0)), dtype=predictions.dtype)
+            mask = tf.cast(tf.math.logical_not(tf.math.equal(decoder_input[:, :-1], 0)), dtype=predictions.dtype)
             loss = self.compiled_loss(target, predictions, sample_weight=mask)
 
         # Compute and clip gradients
@@ -224,7 +224,8 @@ class Transformer(tf.keras.Model):
 
         return loss
 
-    def call(self, encoder_input, decoder_input, training=False):
+    def call(self, inputs, training=False):
+        encoder_input, decoder_input = inputs
         # Embed input sequences
         encoder_emb = self.problem_embedding_layer(encoder_input)
         decoder_emb = self.solution_embedding_layer(decoder_input)
@@ -251,7 +252,7 @@ def build_and_compile(args: ModelArgs):
 
     # Initialize and call the Transformer
     transformer = Transformer(args)
-    final_output = transformer(encoder_input, decoder_input)
+    final_output = transformer((encoder_input, decoder_input))
 
     # Create the model
     model = tf.keras.Model(inputs=[encoder_input, decoder_input], outputs=final_output)
@@ -263,12 +264,13 @@ def build_and_compile(args: ModelArgs):
         optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(ignore_class=0, from_logits=True),
         metrics=['accuracy'],
-        run_eagerly=False # !CAUTION!
+        run_eagerly=True # !CAUTION! REVERT BACK TO FALSE FOR RUNNING
     )
 
     return model
 
-def calculate_loss(model_output, tokenized_code, mask):
-    loss = tf.keras.losses.sparse_categorical_crossentropy(tokenized_code, model_output, from_logits=True)
+# Not needed anymore
+def calculate_loss(model_output, decoder_input, mask):
+    loss = tf.keras.losses.sparse_categorical_crossentropy(decoder_input, model_output, from_logits=True)
     loss *= mask  # Apply mask
     return tf.reduce_sum(loss) / tf.reduce_sum(mask)
