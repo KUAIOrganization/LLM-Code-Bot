@@ -64,23 +64,6 @@ def main():
     # Train the model
     history = model.fit(dataset_choice.dataset, epochs=args.epochs, callbacks=[tensorboard_callback]) # history variable unused...
     
-    """Manual training setup
-    optimizer = model.optimizer
-    for epoch in range(epochs):
-        print(f"Start of Epoch {epoch+1}")
-        
-        # Iterate over the batches of the dataset.
-        for step, ((tokenized_question, tokenized_code), target) in enumerate(loader.dataset):
-            # Call the custom train_step
-            loss = train_step(model, optimizer, tokenized_question, tokenized_code[:, :-1])
-            
-            # Log every 200 batches
-            if step % 200 == 0:
-                print(f"Epoch {epoch+1}, Step {step}, Loss: {loss.numpy()}")
-        
-        print(f"End of Epoch {epoch+1}, Loss: {loss.numpy()}")
-    """
-    
     # Save the model
     model_dir = os.path.join(base_dir, "Transformer", "model_files")
     model.save(os.path.join(model_dir, "model.keras"))

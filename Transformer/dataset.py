@@ -62,7 +62,7 @@ class Dataset:
     
         self.dataset = parsed_dataset.map(map_to_model_inputs)
         self.dataset.shuffle(buffer_size=1024).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE) # Buffer size?
-        
+
         #return self.dataset
 
 Codeforces_A = Dataset(

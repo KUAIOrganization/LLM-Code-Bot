@@ -205,6 +205,25 @@ class Transformer(tf.keras.Model):
 
         self.final_layer = tf.keras.layers.Dense(self.solution_vocab_size, name='output_layer')
 
+    def train_step(self, data):
+        (tokenized_question, tokenized_code), target = data
+
+        with tf.GradientTape() as tape:
+            predictions = self((tokenized_question, tokenized_code[:, :-1]), training=True)
+            
+            # Mask PAD tokens
+            mask = tf.cast(tf.math.logical_not(tf.math.equal(tokenized_code[:, :-1], 0)), dtype=predictions.dtype)
+            loss = self.compiled_loss(target, predictions, sample_weight=mask)
+
+        # Compute and clip gradients
+        gradients = tape.gradient(loss, self.trainable_variables)
+        clipped_gradients, _ = tf.clip_by_global_norm(gradients, 10.0) # Hardcoded clip norm
+
+        # Apply gradients to update model weights
+        self.optimizer.apply_gradients(zip(clipped_gradients, self.trainable_variables))
+
+        return loss
+
     def call(self, encoder_input, decoder_input, training=False):
         # Embed input sequences
         encoder_emb = self.problem_embedding_layer(encoder_input)
@@ -213,10 +232,8 @@ class Transformer(tf.keras.Model):
         # Generate and add positional encodings
         #input_seq_length = tf.shape(encoder_input)[1] # Old method doesn't work anymore
         #output_seq_length = tf.shape(decoder_input)[1]
-        pos_encoding_enc = positional_encoder(self.input_seq_length, self.dim)
-        pos_encoding_dec = positional_encoder(self.output_seq_length, self.dim)
-        encoder_emb += pos_encoding_enc
-        decoder_emb += pos_encoding_dec
+        encoder_emb += positional_encoder(self.input_seq_length, self.dim)
+        decoder_emb += positional_encoder(self.output_seq_length, self.dim)
         
         # Forward pass
         encoder_output = self.encoder(encoder_emb, training=training)
@@ -255,23 +272,3 @@ def calculate_loss(model_output, tokenized_code, mask):
     loss = tf.keras.losses.sparse_categorical_crossentropy(tokenized_code, model_output, from_logits=True)
     loss *= mask  # Apply mask
     return tf.reduce_sum(loss) / tf.reduce_sum(mask)
-
-@tf.function
-def train_step(model, optimizer, tokenized_question, tokenized_code, clip_norm=10.0):
-    with tf.GradientTape() as tape:
-        model_output = model([tokenized_question, tokenized_code], training=True)
-
-        # Mask PAD tokens
-        mask = tf.cast(tf.math.logical_not(tf.math.equal(tokenized_code, 0)), dtype=model_output.dtype)
-        
-        # Calculate loss
-        average_loss = calculate_loss(model_output, tokenized_code, mask)
-
-    # Compute and clip gradients
-    gradients = tape.gradient(average_loss, model.trainable_variables)
-    clipped_gradients, _ = tf.clip_by_global_norm(gradients, clip_norm)
-
-    # Apply gradients to update model weights
-    optimizer.apply_gradients(zip(clipped_gradients, model.trainable_variables))
-
-    return average_loss
