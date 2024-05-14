@@ -10,8 +10,9 @@ import pickle
 
 from Transformer import ModelArgs, Dataset_Generator, build_and_compile, Codeforces_A, Problem_Solution, All
 
-#from tensorflow.python.framework.ops import disable_eager_execution
-#disable_eager_execution()
+# Trying to disable eager execution
+from tensorflow.python.framework.ops import disable_eager_execution
+disable_eager_execution()
 
 def main():
     # Use environment variable if set
@@ -40,6 +41,7 @@ def main():
 
     args.input_seq_length = dataset_choice.reduced_length_input if reduced else dataset_choice.max_length_input
     args.output_seq_length = dataset_choice.reduced_length_output if reduced else dataset_choice.max_length_output
+    #args.num_samples = dataset_choice.
     
     if not os.path.exists(dataset_choice.tokenized_path):
         generator = Dataset_Generator(base_dir)
@@ -47,6 +49,18 @@ def main():
         load_function()
 
     dataset_choice.create_dataset(args.batch_size, reduced)
+    """
+    print("-------------------------------------------")
+    if hasattr(dataset_choice, 'dataset'):
+        print("-------------------------------------------")
+        print(dataset_choice.dataset.cardinality())  # .numpy()
+    else:
+        print("No TensorFlow dataset available in the Dataset object.")
+    print(dataset_choice.cardinality())
+    """
+    # Check the type of the dataset
+    print("-------------------------------------------")
+    print("Dataset type:", type(dataset_choice.dataset))
 
     # Load tokenizer information
     with open('Transformer/model_files/problem_tokenizer.pkl', 'rb') as f:
@@ -64,7 +78,11 @@ def main():
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fit_log_dir, histogram_freq=1)
     
     # Train the model
-    history = model.fit(dataset_choice.dataset, epochs=args.epochs, callbacks=[tensorboard_callback]) # history variable unused...
+    history = model.fit(
+        dataset_choice.dataset, 
+        epochs=args.epochs, 
+        steps_per_epoch = 1, #args.steps_per_epoch, # Somehow need to have this loaded by this point
+        callbacks=[tensorboard_callback]) # history variable unused...
     
     # Save the model
     model_dir = os.path.join(base_dir, "Transformer", "model_files")
@@ -73,9 +91,9 @@ def main():
 if __name__ == '__main__':
     """Miscellaneous functions to run
     """
-    #tf.config.run_functions_eagerly(True)
+    #tf.config.run_functions_eagerly(False)
     #tf.data.experimental.enable_debug_mode()
-    #tf.executing_eagerly()
+    #print(tf.executing_eagerly())
 
     main()
 
@@ -95,6 +113,7 @@ if __name__ == '__main__':
 
     #print(tf.sysconfig.get_build_info()["cuda_version"])
     #print(tf.sysconfig.get_build_info()["cudnn_version"])
+    #print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
 
     #!pip install --upgrade tensorflow
     #!pip install --upgrade tensorboard

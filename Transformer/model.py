@@ -19,6 +19,7 @@ class ModelArgs:
     solution_vocab_size: int = 0
     input_seq_length: int = 0
     output_seq_length: int = 0
+    steps_per_epoch: int = 0
     
     batch_size: int = 32
     learning_rate: float = 1e-4
@@ -205,6 +206,7 @@ class Transformer(tf.keras.Model):
 
         self.final_layer = tf.keras.layers.Dense(self.solution_vocab_size, name='output_layer')
 
+    @tf.function
     def train_step(self, data):
         (encoder_input, decoder_input), target = data
 
@@ -264,7 +266,7 @@ def build_and_compile(args: ModelArgs):
         optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(ignore_class=0, from_logits=True),
         metrics=['accuracy'],
-        run_eagerly=True # !CAUTION! REVERT BACK TO FALSE FOR RUNNING
+        run_eagerly=False # !CAUTION! REVERT BACK TO FALSE FOR RUNNING
     )
 
     return model

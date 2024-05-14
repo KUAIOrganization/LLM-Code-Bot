@@ -18,6 +18,9 @@ class Dataset:
         self.max_length_output = max_length_output
         self.reduced_length_output = reduced_length_output
         
+        self.num_batches = 0
+        self.reduced_batches = 0
+
         Dataset.registry.append(self)
     
     def set_schema(self, reduced):
@@ -33,7 +36,7 @@ class Dataset:
     def write_tfrecord(self, encoder_inputs, decoder_inputs, targets, reduced: bool):
         with tf.io.TFRecordWriter(self.reduced_path if reduced else self.tokenized_path) as writer:
             for encoder_input, decoder_input, target in zip(encoder_inputs, decoder_inputs, targets):
-                # Skip sequences longer than the reduced limits
+                # Skip sequences longer than 'reduced'
                 if reduced and (encoder_input[self.reduced_length_input] or target[self.reduced_length_output]):
                     continue
                 else:
@@ -58,8 +61,8 @@ class Dataset:
         parsed_dataset = raw_dataset.map(lambda x: self.parse_tfrecord(x)) # Calls self.parse_tfrecord()
 
         def map_to_model_inputs(parsed_example):
-            # Maps to form ['encoder_input', 'decoder_input']
-            # To tuple or not to tuple
+            # Maps to ['encoder_input', 'decoder_input']
+            # To tuple or not to tuple...
             return ((
                 parsed_example['encoder_input'],
                 parsed_example['decoder_input']
@@ -71,6 +74,16 @@ class Dataset:
     
         self.dataset = parsed_dataset.map(map_to_model_inputs)
         self.dataset = self.dataset.shuffle(buffer_size=1024).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE) # Buffer size?
+
+        """
+        self.num_batches = self.dataset.reduce(0, lambda x,_: x+1).numpy()
+        self.reduced_batches = self.dataset.reduce(0, lambda x,_: x+1).numpy()
+        print("---------------------------------")
+        print(self.num_batches)"""
+
+
+    def count_batches(self, dataset):
+        self.num_batches = dataset.reduce(0, lambda x,_: x+1).numpy()
 
 Codeforces_A = Dataset(
     'Codeforces_A',
