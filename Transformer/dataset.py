@@ -1,49 +1,38 @@
-import numpy as np
+import numpy
 import os
 import tensorflow as tf
+
+from tensorflow.compat.v1.io import tf_record_iterator
 
 
 class Dataset:
     registry: list['Dataset'] = []
 
-    def __init__(self, name, max_length_input, reduced_length_input, max_length_output, reduced_length_output):
+    def __init__(self, name, input_length, output_length):
         self.name = name
         self.raw_path = os.path.join('Training_Data', self.name)
         self.tokenized_path = os.path.join(self.raw_path, 'tokenized_padded_data.tfrecord')
-        self.reduced_path = os.path.join(self.raw_path, 'tokenized_padded_reduced_data.tfrecord')
 
-        self.max_length_input = max_length_input
-        self.reduced_length_input = reduced_length_input
-
-        self.max_length_output = max_length_output
-        self.reduced_length_output = reduced_length_output
+        self.input_length = input_length
+        self.output_length = output_length
         
         self.num_batches = 0
-        self.reduced_batches = 0
 
         Dataset.registry.append(self)
     
-    def set_schema(self, reduced):
+    def set_schema(self):
         self.schema = {
-            'encoder_input': tf.io.FixedLenFeature([self.reduced_length_input if reduced else self.max_length_input], tf.int64),
-            'decoder_input': tf.io.FixedLenFeature([self.reduced_length_output if reduced else self.max_length_output], tf.int64),
-            'target': tf.io.FixedLenFeature([self.reduced_length_output if reduced else self.max_length_output], tf.int64),
+            'encoder_input': tf.io.FixedLenFeature([self.input_length], tf.int64),
+            'decoder_input': tf.io.FixedLenFeature([self.output_length], tf.int64),
+            'target': tf.io.FixedLenFeature([self.output_length], tf.int64),
         }
 
     def parse_tfrecord(self, example):
         return tf.io.parse_single_example(example, self.schema)
 
-    def write_tfrecord(self, encoder_inputs, decoder_inputs, targets, reduced: bool):
-        with tf.io.TFRecordWriter(self.reduced_path if reduced else self.tokenized_path) as writer:
+    def write_tfrecord(self, encoder_inputs, decoder_inputs, targets):
+        with tf.io.TFRecordWriter(self.tokenized_path) as writer:
             for encoder_input, decoder_input, target in zip(encoder_inputs, decoder_inputs, targets):
-                # Skip sequences longer than 'reduced'
-                if reduced and (encoder_input[self.reduced_length_input] or target[self.reduced_length_output]):
-                    continue
-                else:
-                    encoder_input = encoder_input[:self.reduced_length_input]
-                    decoder_input = decoder_input[:self.reduced_length_output]
-                    target = target[:self.reduced_length_output]
-                
                 # Serialize the example
                 example = tf.train.Example(features=tf.train.Features(feature={
                     'encoder_input': tf.train.Feature(int64_list=tf.train.Int64List(value=encoder_input)),
@@ -53,12 +42,13 @@ class Dataset:
 
                 writer.write(example.SerializeToString())
 
-    def create_dataset(self, batch_size, reduced):
-        self.set_schema(reduced) # Set schema
+    def create_dataset(self, batch_size):
+        self.set_schema()
+        self.count_batches(batch_size)
 
         # Load and parse tfrecord into encoder_inputs, decoder_inputs, targets
-        raw_dataset = tf.data.TFRecordDataset(self.reduced_path if reduced else self.tokenized_path)
-        parsed_dataset = raw_dataset.map(lambda x: self.parse_tfrecord(x)) # Calls self.parse_tfrecord()
+        raw_tfrecord = tf.data.TFRecordDataset(self.tokenized_path)
+        parsed_dataset = raw_tfrecord.map(lambda x: self.parse_tfrecord(x))
 
         def map_to_model_inputs(parsed_example):
             # Maps to ['encoder_input', 'decoder_input']
@@ -72,33 +62,53 @@ class Dataset:
                 'decoder_input': parsed_example['decoder_input']
             }, parsed_example['target'])
     
-        self.dataset = parsed_dataset.map(map_to_model_inputs)
-        self.dataset = self.dataset.shuffle(buffer_size=1024).batch(batch_size).prefetch(tf.data.experimental.AUTOTUNE) # Buffer size?
+        dataset = parsed_dataset.map(map_to_model_inputs, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        dataset = dataset.shuffle(buffer_size=1024)
+        dataset = dataset.batch(batch_size)
+        dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE) # Buffer size?
+        print("-------------------------------------------")
+        print(self.num_batches)
+        print("-------------------------------------------")
+        dataset = dataset.apply(tf.data.experimental.assert_cardinality(self.num_batches)) # Set cardinality
+        print("-------------------------------------------")
+        cardinality = self.get_cardinality(dataset)
+        print(cardinality)
+        print(cardinality == tf.data.experimental.INFINITE_CARDINALITY)
+        print(cardinality == tf.data.experimental.UNKNOWN_CARDINALITY)
+        print("-------------------------------------------")
+        self.dataset = dataset
+
+        #self.num_batches = dataset.reduce(0, lambda x, _: x + 1).numpy()
+        #print("---------------------------------")
+        #print(self.num_batches)
 
         """
         self.num_batches = self.dataset.reduce(0, lambda x,_: x+1).numpy()
-        self.reduced_batches = self.dataset.reduce(0, lambda x,_: x+1).numpy()
         print("---------------------------------")
         print(self.num_batches)"""
 
-
-    def count_batches(self, dataset):
-        self.num_batches = dataset.reduce(0, lambda x,_: x+1).numpy()
+    @tf.function
+    def get_cardinality(self, dataset):
+        return tf.data.experimental.cardinality(dataset)
+    
+    def count_batches(self, batch_size):
+        count = 0
+        for _ in tf_record_iterator(self.tokenized_path):
+            count += 1
+        self.num_batches = -(-count // batch_size)
 
 Codeforces_A = Dataset(
     'Codeforces_A',
-    643, 530, 529, 200 # 180 reduced_length_output for all is good visual cutoff
+    643, 529
 )
 
 Problem_Solution = Dataset(
     'Problem_Solution',
-    98, 98, 1305, 200
+    98, 1305
 )
 
 All = Dataset(
     'All',
-    max([dataset.max_length_input for dataset in Dataset.registry]), 
-    max([dataset.reduced_length_input for dataset in Dataset.registry]),
-    max([dataset.max_length_output for dataset in Dataset.registry]),
-    max([dataset.reduced_length_output for dataset in Dataset.registry])
+    max([dataset.input_length for dataset in Dataset.registry]), 
+    max([dataset.output_length for dataset in Dataset.registry])
 )

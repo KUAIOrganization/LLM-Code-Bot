@@ -4,6 +4,7 @@
 
 import datetime
 import os
+import numpy as np
 
 import tensorflow as tf
 import pickle
@@ -37,10 +38,9 @@ def main():
     
     # Generate the dataset
     dataset_choice = Problem_Solution # [All, Codeforces_A, Problem_Solution]
-    reduced = True # If you want to use a small dataset
 
-    args.input_seq_length = dataset_choice.reduced_length_input if reduced else dataset_choice.max_length_input
-    args.output_seq_length = dataset_choice.reduced_length_output if reduced else dataset_choice.max_length_output
+    args.input_seq_length = dataset_choice.input_length
+    args.output_seq_length = dataset_choice.output_length
     #args.num_samples = dataset_choice.
     
     if not os.path.exists(dataset_choice.tokenized_path):
@@ -48,7 +48,7 @@ def main():
         load_function = generator.get_load_function(dataset_choice)
         load_function()
 
-    dataset_choice.create_dataset(args.batch_size, reduced)
+    dataset_choice.create_dataset(args.batch_size)
     """
     print("-------------------------------------------")
     if hasattr(dataset_choice, 'dataset'):
@@ -57,10 +57,14 @@ def main():
     else:
         print("No TensorFlow dataset available in the Dataset object.")
     print(dataset_choice.cardinality())
-    """
     # Check the type of the dataset
     print("-------------------------------------------")
     print("Dataset type:", type(dataset_choice.dataset))
+    print(dataset_choice.dataset.element_spec)
+    print("-------------------------------------------")
+    print(tf.data.experimental.cardinality(dataset_choice.dataset))
+    print("-------------------------------------------")
+    """
 
     # Load tokenizer information
     with open('Transformer/model_files/problem_tokenizer.pkl', 'rb') as f:
@@ -81,7 +85,7 @@ def main():
     history = model.fit(
         dataset_choice.dataset, 
         epochs=args.epochs, 
-        steps_per_epoch = 1, #args.steps_per_epoch, # Somehow need to have this loaded by this point
+        steps_per_epoch = dataset_choice.num_batches, #args.steps_per_epoch
         callbacks=[tensorboard_callback]) # history variable unused...
     
     # Save the model
@@ -91,9 +95,9 @@ def main():
 if __name__ == '__main__':
     """Miscellaneous functions to run
     """
-    #tf.config.run_functions_eagerly(False)
+    tf.config.run_functions_eagerly(False)
     #tf.data.experimental.enable_debug_mode()
-    #print(tf.executing_eagerly())
+    print(tf.executing_eagerly())
 
     main()
 

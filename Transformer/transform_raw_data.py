@@ -75,8 +75,7 @@ class Dataset_Generator:
             print(f"Discrepancy found in CodeForces_A sequence lengths: {e}")
 
         # Write to file
-        Codeforces_A.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
-        Codeforces_A.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
+        Codeforces_A.write_tfrecord(encoder_inputs, decoder_inputs, targets, len(targets))
 
     def load_Problem_Solution(self):
         problems_path = os.path.join(self.base_dir, Problem_Solution.raw_path, 'Problem_Solution.csv')
@@ -103,8 +102,7 @@ class Dataset_Generator:
             print(f"Discrepancy found in Problem_Solution sequence lengths: {e}")
 
         # Write to file
-        Problem_Solution.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
-        Problem_Solution.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
+        Problem_Solution.write_tfrecord(encoder_inputs, decoder_inputs, targets)
     
     def load_All(self):
         # Generate datasets if they don't exist
@@ -130,5 +128,4 @@ class Dataset_Generator:
         targets = np.concatenate((cf_targets, ps_targets), axis=0)
         
         # Write to file
-        All.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
-        All.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
+        All.write_tfrecord(encoder_inputs, decoder_inputs, targets)
