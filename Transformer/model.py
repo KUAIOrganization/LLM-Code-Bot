@@ -17,11 +17,8 @@ class ModelArgs:
 
     problem_vocab_size: int = 0  # Set when the dataset is loaded
     solution_vocab_size: int = 0
-    input_seq_length: int = 0
-    output_seq_length: int = 0
-    steps_per_epoch: int = 0
     
-    batch_size: int = 32
+    batch_size: int = 16
     learning_rate: float = 1e-4
     dropout_rate: float = 0.0 # Not used
     
@@ -29,10 +26,10 @@ class ModelArgs:
 
 
 def positional_encoder(seq_length, dim):
-    # Generate positions for each element
+    # Generate positions
     positions = tf.range(seq_length, dtype=tf.float32)[..., tf.newaxis]
     
-    # Create a range for the dimensions and compute division terms
+    # Compute division terms
     i = tf.range(dim, dtype=tf.float32)
     div_terms = 1 / tf.pow(10000.0, (2 * (i // 2)) / tf.cast(dim, tf.float32))
     
@@ -44,6 +41,8 @@ def positional_encoder(seq_length, dim):
     # Interlace and reshape
     pos_encoding = tf.reshape(tf.concat([sine, cosine], axis=-1), [1, seq_length, dim])
 
+    # print("!!!!!!!!!!!!!!!!!!!!!")
+    # print(tf.shape(pos_encoding))
     return pos_encoding
 
 
@@ -63,7 +62,7 @@ class EncoderLayer(tf.keras.layers.Layer):
         # Feed-Forward Network Layers
         self.ffn = tf.keras.Sequential([
             tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='encoder_ffn_dense1'), 
-            tf.keras.layers.LeakyReLU(alpha=0.01), # Trying LeakyReLu
+            tf.keras.layers.LeakyReLU(negative_slope=0.03), 
             tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='encoder_ffn_dense2')
         ], name='encoder_ffn')
 
@@ -118,7 +117,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         # Feed Forward Network Layers
         self.ffn = tf.keras.Sequential([
             tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='decoder_ffn_dense1'), 
-            tf.keras.layers.LeakyReLU(alpha=0.01), # Trying LeakyReLu
+            tf.keras.layers.LeakyReLU(negative_slope=0.03), 
             tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='decoder_ffn_dense2')
         ], name='decoder_ffn')
         
@@ -192,8 +191,6 @@ class Transformer(tf.keras.Model):
         super(Transformer, self).__init__()
         
         self.dim = args.dim
-        self.input_seq_length = args.input_seq_length
-        self.output_seq_length = args.output_seq_length
         self.problem_vocab_size = args.problem_vocab_size
         self.solution_vocab_size = args.solution_vocab_size
 
@@ -226,17 +223,23 @@ class Transformer(tf.keras.Model):
 
         return loss
 
-    def call(self, inputs, training=False):
-        encoder_input, decoder_input = inputs
-        # Embed input sequences
+    def call(self, encoder_input, decoder_input, training=False):
+        # print("-------------------")
+        # print("Encoder input shape:", tf.shape(encoder_input))
+        # print("Decoder input shape:", tf.shape(decoder_input))
+
+        # Embeddings
         encoder_emb = self.problem_embedding_layer(encoder_input)
         decoder_emb = self.solution_embedding_layer(decoder_input)
         
-        # Generate and add positional encodings
-        #input_seq_length = tf.shape(encoder_input)[1] # Old method doesn't work anymore
-        #output_seq_length = tf.shape(decoder_input)[1]
-        encoder_emb += positional_encoder(self.input_seq_length, self.dim)
-        decoder_emb += positional_encoder(self.output_seq_length, self.dim)
+        # Positional encodings
+        input_seq_length = tf.shape(encoder_input)[1] # Old method works now
+        output_seq_length = tf.shape(decoder_input)[1]
+        encoder_emb += positional_encoder(input_seq_length, self.dim)
+        decoder_emb += positional_encoder(output_seq_length, self.dim)
+        # print("-------------------")
+        # print("encoder_emb shape:", tf.shape(encoder_emb))
+        # print("decoder_emb shape:", tf.shape(decoder_emb))
         
         # Forward pass
         encoder_output = self.encoder(encoder_emb, training=training)
@@ -249,12 +252,12 @@ class Transformer(tf.keras.Model):
 
 def build_and_compile(args: ModelArgs):
     # Define model inputs
-    encoder_input = tf.keras.Input(shape=(None,), dtype='int64', name='encoder_input')
-    decoder_input = tf.keras.Input(shape=(None,), dtype='int64', name='decoder_input')
+    encoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='encoder_input')
+    decoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='decoder_input')
 
     # Initialize and call the Transformer
     transformer = Transformer(args)
-    final_output = transformer((encoder_input, decoder_input))
+    final_output = transformer(encoder_input, decoder_input)
 
     # Create the model
     model = tf.keras.Model(inputs=[encoder_input, decoder_input], outputs=final_output)

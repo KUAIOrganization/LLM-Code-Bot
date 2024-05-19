@@ -26,13 +26,13 @@ class Tokenizers:
             pickle.dump(self.problem_tokenizer, f)
         
         # Tokenize with Keras tokenizer
-        problems = self.problem_tokenizer.texts_to_sequences(problems)
+        encoder_inputs = self.problem_tokenizer.texts_to_sequences(problems)
         
         # Pad to same length
-        max_length_input = max(len(seq) for seq in problems)
-        problems = pad_sequences(problems, padding='post', maxlen=max_length_input)
+        max_length_input = max(len(seq) for seq in encoder_inputs)
+        encoder_inputs = pad_sequences(encoder_inputs, padding='post', maxlen=max_length_input)
         
-        return problems
+        return encoder_inputs
     
     def tokenize_output(self, solutions):
         # Tokenize with Python tokenizer
@@ -49,7 +49,7 @@ class Tokenizers:
         self.solution_tokenizer.fit_on_texts(decoder_inputs + [['XXEOS']]) # Both at once
         decoder_inputs = self.solution_tokenizer.texts_to_sequences(decoder_inputs)
         targets = self.solution_tokenizer.texts_to_sequences(targets)
-        
+
         # Pad to same length
         max_length_output = max(len(seq) for seq in targets)
         decoder_inputs = pad_sequences(decoder_inputs, padding='post', maxlen=max_length_output)
@@ -58,5 +58,5 @@ class Tokenizers:
         # Store tokenizer information
         with open('Transformer/model_files/solution_tokenizer.pkl', 'wb') as f:
             pickle.dump(self.solution_tokenizer, f)
-        
+
         return decoder_inputs, targets

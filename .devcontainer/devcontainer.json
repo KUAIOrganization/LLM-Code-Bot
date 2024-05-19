@@ -23,7 +23,8 @@
                 "terminal.integrated.gpuAcceleration": "on"
             },
             "extensions": [
-                "ms-python.python"
+                "ms-python.python",
+                "xyz.local-history"
             ]
         }
     }

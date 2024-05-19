@@ -29,6 +29,7 @@ RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86
 RUN apt-get install -y cuda-toolkit-12-3
 
 # Install cuDNN from local file
+# https://developer.nvidia.com/downloads/compute/cudnn/secure/8.9.7/local_installers/12.x/cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb/
 COPY cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb /tmp/
 RUN dpkg -i /tmp/cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb && \
     cp /var/cudnn-local-repo-ubuntu2204-8.9.7.29/cudnn-local-08A7D361-keyring.gpg /usr/share/keyrings/ && \
@@ -37,7 +38,7 @@ RUN dpkg -i /tmp/cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb && \
     apt-get install -y libcudnn8 libcudnn8-dev libcudnn8-samples
 
 # Install Python packages
-RUN pip install --no-cache-dir tensorflow[and-cuda] matplotlib numpy pandas tensorboard
+RUN pip install --no-cache-dir tensorflow[and-cuda]==2.16.1 keras==3.0 matplotlib numpy pandas tensorboard==2.16.2
 
 # Cleanup
 RUN apt-get clean && \

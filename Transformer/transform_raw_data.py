@@ -19,14 +19,14 @@ from tensorflow.keras.preprocessing.sequence import pad_sequences
 class Dataset_Generator:
     def __init__(self, base_dir: str):
         self.base_dir = base_dir
-        self.loader_log_dir = os.path.join(self.base_dir, 'logs' + datetime.datetime.now().strftime('%m_%d_%H_%M'), 'loader')
+        self.generator_log_dir = os.path.join(self.base_dir, 'logs' + datetime.datetime.now().strftime('%m_%d_%H_%M'), 'generator')
 
         self.tokenizer = Tokenizers()
     
-    def get_load_function(self, dataset):
-        return getattr(self, 'load_' + dataset.name)
+    def get_generate_function(self, dataset):
+        return getattr(self, 'generate_' + dataset.name)
 
-    def load_Codeforces_A(self):
+    def generate_Codeforces_A(self):
         # Load problems
         problems_path = os.path.join(self.base_dir, Codeforces_A.raw_path, 'A_problems.json')
         with open(problems_path, 'r') as problems_file:
@@ -74,11 +74,10 @@ class Dataset_Generator:
         except AssertionError as e:
             print(f"Discrepancy found in CodeForces_A sequence lengths: {e}")
 
-        # Write to file
-        Codeforces_A.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
-        Codeforces_A.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
+        # Write to npz
+        self.write_file(encoder_inputs, decoder_inputs, targets, Codeforces_A.tokenized_path)
 
-    def load_Problem_Solution(self):
+    def generate_Problem_Solution(self):
         problems_path = os.path.join(self.base_dir, Problem_Solution.raw_path, 'Problem_Solution.csv')
         df = pd.read_csv(problems_path, encoding_errors='ignore')
 
@@ -90,7 +89,6 @@ class Dataset_Generator:
             solution = row['Python Code']
             problems.append(problem)
             solutions.append(solution)
-
         # Tokenize and pad
         encoder_inputs = self.tokenizer.tokenize_input(problems)
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
@@ -102,33 +100,50 @@ class Dataset_Generator:
         except AssertionError as e:
             print(f"Discrepancy found in Problem_Solution sequence lengths: {e}")
 
-        # Write to file
-        Problem_Solution.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
-        Problem_Solution.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
+        # Write to npz
+        self.write_file(encoder_inputs, decoder_inputs, targets, Problem_Solution.tokenized_path)
     
-    def load_All(self):
-        # Generate datasets if they don't exist
+    def generate_All(self):
+        # Generate datasets
         for dataset in Dataset.registry:
-            if not os.path.exists(dataset.tokenized_path):
-               load_function = self.get_load_function(dataset)
-               load_function(dataset)
+            if dataset.name != "All" and not os.path.exists(dataset.tokenized_path):
+               generate_function = self.get_generate_function(dataset)
+               generate_function()
         
-        # Pad to length of longest source
+        # Load datasets
         cf_data = np.load(Codeforces_A.tokenized_path)
-        cf_encoder_inputs = pad_sequences(cf_data['encoder_inputs'], padding='post', maxlen=Codeforces_A.max_length_input)
-        cf_decoder_inputs = pad_sequences(cf_data['decoder_inputs'], padding='post', maxlen=Codeforces_A.max_length_output)
-        cf_targets = pad_sequences(cf_data['targets'], padding='post', maxlen=Codeforces_A.max_length_output)
-
         ps_data = np.load(Problem_Solution.tokenized_path)
-        ps_encoder_inputs = pad_sequences(ps_data['encoder_inputs'], padding='post', maxlen=Problem_Solution.max_length_input)
-        ps_decoder_inputs = pad_sequences(ps_data['decoder_inputs'], padding='post', maxlen=Problem_Solution.max_length_output)
-        ps_targets = pad_sequences(ps_data['targets'], padding='post', maxlen=Problem_Solution.max_length_output)
 
-        # Concatenate the different data sources
+        # Pad
+        max_length_enc = max(max(len(seq) for seq in cf_data['encoder_inputs']), max(len(seq) for seq in ps_data['encoder_inputs']))
+        max_length_dec = max(max(len(seq) for seq in cf_data['decoder_inputs']), max(len(seq) for seq in ps_data['decoder_inputs']))
+
+        cf_encoder_inputs = pad_sequences(cf_data['encoder_inputs'], padding='post', maxlen = max_length_enc)
+        cf_decoder_inputs = pad_sequences(cf_data['decoder_inputs'], padding='post', maxlen = max_length_dec)
+        cf_targets = pad_sequences(cf_data['targets'], padding='post', maxlen = max_length_dec)
+
+        ps_encoder_inputs = pad_sequences(ps_data['encoder_inputs'], padding='post', maxlen = max_length_enc)
+        ps_decoder_inputs = pad_sequences(ps_data['decoder_inputs'], padding='post', maxlen = max_length_dec)
+        ps_targets = pad_sequences(ps_data['targets'], padding='post', maxlen = max_length_dec)
+
+        # Concatenate
         encoder_inputs = np.concatenate((cf_encoder_inputs, ps_encoder_inputs), axis=0)
         decoder_inputs = np.concatenate((cf_decoder_inputs, ps_decoder_inputs), axis=0)
         targets = np.concatenate((cf_targets, ps_targets), axis=0)
         
-        # Write to file
-        All.write_tfrecord(encoder_inputs, decoder_inputs, targets, False)
-        All.write_tfrecord(encoder_inputs, decoder_inputs, targets, True) # Reduced = True
+        # Write to npz
+        self.write_file(encoder_inputs, decoder_inputs, targets, All.tokenized_path)
+    
+    def write_file(self, encoder_inputs, decoder_inputs, targets, output_file):
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        np.savez_compressed(output_file, encoder_inputs=encoder_inputs, decoder_inputs=decoder_inputs, targets=targets)
+
+        # To CSV
+        # os.makedirs(os.path.dirname(output_file), exist_ok=True)
+        # data = {
+        #     'problems': problems.tolist(),
+        #     'decoder_inputs': decoder_inputs.tolist(),
+        #     'targets': targets.tolist()
+        # }
+        # df = pd.DataFrame(data)
+        # df.to_csv(output_file, index=False)
