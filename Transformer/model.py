@@ -9,7 +9,7 @@ import tensorflow as tf
 
 @dataclass
 class ModelArgs:
-    dim: int = 256
+    dim: int = 512
     dim_ff = dim * 4
     num_layers: int = 6
     num_heads: int = 4
@@ -22,7 +22,7 @@ class ModelArgs:
     learning_rate: float = 1e-4
     dropout_rate: float = 0.0 # Not used
     
-    epochs: int = 1
+    epochs: int = 2
 
 
 def positional_encoder(seq_length, dim):
@@ -40,9 +40,8 @@ def positional_encoder(seq_length, dim):
     
     # Interlace and reshape
     pos_encoding = tf.reshape(tf.concat([sine, cosine], axis=-1), [1, seq_length, dim])
-
-    # print("!!!!!!!!!!!!!!!!!!!!!")
     # print(tf.shape(pos_encoding))
+
     return pos_encoding
 
 
@@ -56,17 +55,17 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.num_heads = args.num_heads
         self.dropout_rate = args.dropout_rate
 
-        # Multi-Head Self-Attention layer
+        # Self-Attention
         self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
 
-        # Feed-Forward Network Layers
+        # Feed-Forward
         self.ffn = tf.keras.Sequential([
             tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='encoder_ffn_dense1'), 
             tf.keras.layers.LeakyReLU(negative_slope=0.03), 
             tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='encoder_ffn_dense2')
         ], name='encoder_ffn')
 
-        # Normalization Layers
+        # Normalization
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='encoder_layernorm1')
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='encoder_layernorm2')
 
@@ -80,7 +79,7 @@ class EncoderLayer(tf.keras.layers.Layer):
         attn_output = self.dropout_mha(attn_output, training=training) # Dropout
         out1 = self.layernorm1(x + attn_output)  # Residual connection
 
-        # Feed-Forward Network
+        # Feed-Forward
         ffn_output = self.ffn(out1)
         ffn_output = self.dropout_ffn(ffn_output, training=training) # Dropout
         out2 = self.layernorm2(out1 + ffn_output)  # Residual connection
@@ -110,18 +109,18 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.num_heads = args.num_heads
         self.dim_key = args.dim_head # head = key
 
-        # Self-Attention and Cross-Attention layers
+        # Self-Attention and Cross-Attention
         self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
         self.mha2 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
         
-        # Feed Forward Network Layers
+        # Feed-Forward
         self.ffn = tf.keras.Sequential([
             tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='decoder_ffn_dense1'), 
             tf.keras.layers.LeakyReLU(negative_slope=0.03), 
             tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='decoder_ffn_dense2')
         ], name='decoder_ffn')
         
-        # Normalization Layers
+        # Normalization
         self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm1')
         self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm2')
         self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm3')
@@ -142,7 +141,7 @@ class DecoderLayer(tf.keras.layers.Layer):
         attn2_output = self.dropout_cross_attn(attn2_output, training=training) # Dropout
         out2 = self.layernorm2(out1 + attn2_output)  # Residual connection
         
-        # Feed-Forward Network
+        # Feed-Forward
         ffn_output = self.ffn(out2)
         ffn_output = self.dropout_ffn(ffn_output, training=training) # Dropout
         out3 = self.layernorm3(ffn_output + out2)  # Residual connection
@@ -207,6 +206,10 @@ class Transformer(tf.keras.Model):
     def train_step(self, data):
         (encoder_input, decoder_input), target = data
 
+        # Check for NaNs
+        tf.debugging.check_numerics(encoder_input, "NaN in encoder_input")
+        tf.debugging.check_numerics(decoder_input, "NaN in decoder_input")
+
         with tf.GradientTape() as tape:
             predictions = self((encoder_input, decoder_input[:, :-1]), training=True)
             
@@ -224,7 +227,6 @@ class Transformer(tf.keras.Model):
         return loss
 
     def call(self, encoder_input, decoder_input, training=False):
-        # print("-------------------")
         # print("Encoder input shape:", tf.shape(encoder_input))
         # print("Decoder input shape:", tf.shape(decoder_input))
 
@@ -237,7 +239,6 @@ class Transformer(tf.keras.Model):
         output_seq_length = tf.shape(decoder_input)[1]
         encoder_emb += positional_encoder(input_seq_length, self.dim)
         decoder_emb += positional_encoder(output_seq_length, self.dim)
-        # print("-------------------")
         # print("encoder_emb shape:", tf.shape(encoder_emb))
         # print("decoder_emb shape:", tf.shape(decoder_emb))
         
@@ -263,13 +264,13 @@ def build_and_compile(args: ModelArgs):
     model = tf.keras.Model(inputs=[encoder_input, decoder_input], outputs=final_output)
 
     # Compile the model
-    #lr_schedule = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate=0.005, decay_steps=500, alpha=0.0001)
+    # lr_schedule = tf.keras.optimizers.schedules.CosineDecay(initial_learning_rate=0.005, decay_steps=500, alpha=0.0001)
     # dataset size / batch size times epochs, is time until decay to alpha
     model.compile(
         optimizer = tf.keras.optimizers.Adam(learning_rate=args.learning_rate),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(ignore_class=0, from_logits=True),
         metrics=['accuracy'],
-        run_eagerly=False # !CAUTION! REVERT BACK TO FALSE FOR RUNNING
+        run_eagerly=False
     )
 
     return model

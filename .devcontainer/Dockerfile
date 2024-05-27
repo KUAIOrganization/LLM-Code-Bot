@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     wget \
     gnupg \
+    libnvinfer-plugin8 \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/*
 
@@ -23,7 +24,8 @@ RUN wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86
     wget https://developer.download.nvidia.com/compute/cuda/12.3.0/local_installers/cuda-repo-ubuntu2204-12-3-local_12.3.0-545.23.06-1_amd64.deb && \
     dpkg -i cuda-repo-ubuntu2204-12-3-local_12.3.0-545.23.06-1_amd64.deb && \
     cp /var/cuda-repo-ubuntu2204-12-3-local/cuda-*-keyring.gpg /usr/share/keyrings/ && \
-    apt-get update
+    apt-get update && \
+    apt-get install -y libcudnn8 libcudnn8-dev libcudnn8-samples
 
 # Install CUDA Toolkit 12-3
 RUN apt-get install -y cuda-toolkit-12-3
@@ -47,4 +49,4 @@ RUN apt-get clean && \
 
 # Set PATH for CUDA 12.3
 ENV PATH=/usr/local/cuda-12.3/bin:${PATH}
-ENV LD_LIBRARY_PATH=/usr/local/cuda-12.3/lib64:${LD_LIBRARY_PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda-12.3/lib64:${LD_LIBRARY_PATH}:/usr/lib/x86_64-linux-gnu/

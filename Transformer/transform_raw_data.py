@@ -28,7 +28,7 @@ class Dataset_Generator:
 
     def generate_Codeforces_A(self):
         # Load problems
-        problems_path = os.path.join(self.base_dir, Codeforces_A.raw_path, 'A_problems.json')
+        problems_path = os.path.join(self.base_dir, Codeforces_A.base_path, 'A_problems.json')
         with open(problems_path, 'r') as problems_file:
             problems_list = json.load(problems_file)
 
@@ -45,7 +45,7 @@ class Dataset_Generator:
             raw_problems[problem_id] = concatenated_problem
 
         # Load solutions
-        submissions_dir = os.path.join(self.base_dir, Codeforces_A.raw_path, 'A_submissions')
+        submissions_dir = os.path.join(self.base_dir, Codeforces_A.base_path, 'A_submissions')
         raw_solutions = [[] for _ in range(2000)] # Up to 2000 problem question indices | I would have this (2000) be a static variable at the top of the class -C.
         submissions = glob.glob(os.path.join(submissions_dir, '*.py'))
 
@@ -75,20 +75,21 @@ class Dataset_Generator:
             print(f"Discrepancy found in CodeForces_A sequence lengths: {e}")
 
         # Write to npz
+        self.write_file(problems, solutions, solutions, Codeforces_A.raw_path)
         self.write_file(encoder_inputs, decoder_inputs, targets, Codeforces_A.tokenized_path)
 
     def generate_Problem_Solution(self):
-        problems_path = os.path.join(self.base_dir, Problem_Solution.raw_path, 'Problem_Solution.csv')
+        problems_path = os.path.join(self.base_dir, Problem_Solution.base_path, 'Problem_Solution.csv')
         df = pd.read_csv(problems_path, encoding_errors='ignore')
 
         problems = []
         solutions = []
-
         for index, row in df.iterrows():
             problem = row['Problem']
             solution = row['Python Code']
             problems.append(problem)
             solutions.append(solution)
+
         # Tokenize and pad
         encoder_inputs = self.tokenizer.tokenize_input(problems)
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
@@ -101,36 +102,28 @@ class Dataset_Generator:
             print(f"Discrepancy found in Problem_Solution sequence lengths: {e}")
 
         # Write to npz
+        self.write_file(problems, solutions, solutions, Problem_Solution.raw_path)
         self.write_file(encoder_inputs, decoder_inputs, targets, Problem_Solution.tokenized_path)
     
     def generate_All(self):
         # Generate datasets
         for dataset in Dataset.registry:
-            if dataset.name != "All" and not os.path.exists(dataset.tokenized_path):
+            if dataset.name != "All" and not (os.path.exists(dataset.raw_path) and os.path.exists(dataset.tokenized_path)):
                generate_function = self.get_generate_function(dataset)
                generate_function()
         
         # Load datasets
-        cf_data = np.load(Codeforces_A.tokenized_path)
-        ps_data = np.load(Problem_Solution.tokenized_path)
-
-        # Pad
-        max_length_enc = max(max(len(seq) for seq in cf_data['encoder_inputs']), max(len(seq) for seq in ps_data['encoder_inputs']))
-        max_length_dec = max(max(len(seq) for seq in cf_data['decoder_inputs']), max(len(seq) for seq in ps_data['decoder_inputs']))
-
-        cf_encoder_inputs = pad_sequences(cf_data['encoder_inputs'], padding='post', maxlen = max_length_enc)
-        cf_decoder_inputs = pad_sequences(cf_data['decoder_inputs'], padding='post', maxlen = max_length_dec)
-        cf_targets = pad_sequences(cf_data['targets'], padding='post', maxlen = max_length_dec)
-
-        ps_encoder_inputs = pad_sequences(ps_data['encoder_inputs'], padding='post', maxlen = max_length_enc)
-        ps_decoder_inputs = pad_sequences(ps_data['decoder_inputs'], padding='post', maxlen = max_length_dec)
-        ps_targets = pad_sequences(ps_data['targets'], padding='post', maxlen = max_length_dec)
+        cf_data = np.load(Codeforces_A.raw_path)
+        ps_data = np.load(Problem_Solution.raw_path)
 
         # Concatenate
-        encoder_inputs = np.concatenate((cf_encoder_inputs, ps_encoder_inputs), axis=0)
-        decoder_inputs = np.concatenate((cf_decoder_inputs, ps_decoder_inputs), axis=0)
-        targets = np.concatenate((cf_targets, ps_targets), axis=0)
+        problems = np.concatenate((cf_data['encoder_inputs'], ps_data['encoder_inputs']), axis=0)
+        solutions = np.concatenate((cf_data['decoder_inputs'], ps_data['decoder_inputs']), axis=0)
         
+        # Tokenize and pad
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+
         # Write to npz
         self.write_file(encoder_inputs, decoder_inputs, targets, All.tokenized_path)
     
@@ -138,12 +131,16 @@ class Dataset_Generator:
         os.makedirs(os.path.dirname(output_file), exist_ok=True)
         np.savez_compressed(output_file, encoder_inputs=encoder_inputs, decoder_inputs=decoder_inputs, targets=targets)
 
-        # To CSV
-        # os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        # data = {
-        #     'problems': problems.tolist(),
-        #     'decoder_inputs': decoder_inputs.tolist(),
-        #     'targets': targets.tolist()
-        # }
-        # df = pd.DataFrame(data)
-        # df.to_csv(output_file, index=False)
+        # Convert to lists
+        encoder_inputs_list = [seq.tolist() for seq in encoder_inputs]
+        decoder_inputs_list = [seq.tolist() for seq in decoder_inputs]
+        targets_list = [seq.tolist() for seq in targets]
+
+        data = {
+            'encoder_inputs': encoder_inputs_list,
+            'decoder_inputs': decoder_inputs_list,
+            'targets': targets_list
+        }
+        df = pd.DataFrame(data)
+        excel_output_file = output_file.replace('.npz', '.xlsx')
+        df.to_excel(excel_output_file, index=False)

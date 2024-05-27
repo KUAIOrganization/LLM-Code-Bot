@@ -10,10 +10,6 @@ import tensorflow as tf
 
 from Transformer import ModelArgs, Dataset_Generator, build_and_compile, Codeforces_A, Problem_Solution, All
 
-# Disable eager execution
-# from tensorflow.python.framework.ops import disable_eager_execution
-# disable_eager_execution()
-
 
 def main():
     # Use environment variable if set
@@ -33,7 +29,7 @@ def main():
         tensor_debug_mode="NO_TENSOR", # CONCISE_HEALTH
         circular_buffer_size=1000) # 1000
     """
-    
+
     args = ModelArgs()
     
     # Generate the dataset
@@ -68,10 +64,6 @@ def main():
         dataset, 
         epochs=args.epochs, 
         callbacks=[tensorboard_callback]) # history variable unused...
-    # history = model.fit(
-    #     dataset, 
-    #     epochs=args.epochs
-    #     steps_per_epoch = dataset_choice.num_batches) # history variable unused...
     
     # Save the model
     model_dir = os.path.join(base_dir, "Transformer", "model_files")
@@ -80,11 +72,15 @@ def main():
 if __name__ == '__main__':
     """Miscellaneous functions to run
     """
+
+    main()
+
+    # # Disable eager execution
+    # from tensorflow.python.framework.ops import disable_eager_execution
+    # disable_eager_execution()
     #tf.config.run_functions_eagerly(True)
     #tf.data.experimental.enable_debug_mode()
     #print(tf.executing_eagerly())
-
-    main()
 
     #print(len(loader.problem_tokenizer.word_index) + 1)
     #print(len(loader.solution_tokenizer.word_index) + 1)
@@ -105,6 +101,3 @@ if __name__ == '__main__':
     #print(tf.sysconfig.get_build_info()["cuda_version"])
     #print(tf.sysconfig.get_build_info()["cudnn_version"])
     #print("Num GPUs Available: ", len(tf.config.list_physical_devices('GPU')))
-
-    #!pip install --upgrade tensorflow
-    #!pip install --upgrade tensorboard
