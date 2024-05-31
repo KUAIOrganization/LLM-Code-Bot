@@ -31,14 +31,8 @@ class Dataset:
 
         return dataset
     
-Codeforces_A = Dataset(
-    'Codeforces_A'
-)
+Codeforces_A = Dataset('Codeforces_A')
+LeetCode_Complete = Dataset('LeetCode_Complete')
+Problem_Solution = Dataset('Problem_Solution')
 
-Problem_Solution = Dataset(
-    'Problem_Solution'
-)
-
-All = Dataset(
-    'All'
-)
+All = Dataset('All')

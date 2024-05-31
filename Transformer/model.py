@@ -9,8 +9,8 @@ import tensorflow as tf
 
 @dataclass
 class ModelArgs:
-    dim: int = 512
-    dim_ff = dim * 4
+    dim: int = 32
+    dim_ff: int = dim * 4
     num_layers: int = 6
     num_heads: int = 4
     dim_head: int = dim // num_heads
@@ -18,11 +18,30 @@ class ModelArgs:
     problem_vocab_size: int = 0  # Set when the dataset is loaded
     solution_vocab_size: int = 0
     
-    batch_size: int = 16
+    batch_size: int = 32
     learning_rate: float = 1e-4
     dropout_rate: float = 0.0 # Not used
     
-    epochs: int = 2
+    epochs: int = 1
+
+    def get_config(self):
+        return {
+            'dim': self.dim,
+            'dim_ff': self.dim_ff,
+            'num_layers': self.num_layers,
+            'num_heads': self.num_heads,
+            'dim_head': self.dim_head,
+            'problem_vocab_size': self.problem_vocab_size,
+            'solution_vocab_size': self.solution_vocab_size,
+            'batch_size': self.batch_size,
+            'learning_rate': self.learning_rate,
+            'dropout_rate': self.dropout_rate,
+            'epochs': self.epochs
+        }
+
+    @classmethod
+    def from_config(cls, config):
+        return cls(**config)
 
 
 def positional_encoder(seq_length, dim):
@@ -46,15 +65,18 @@ def positional_encoder(seq_length, dim):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name='EncoderLayer'):
-        super(EncoderLayer, self).__init__(name=name)
+    def __init__(self, args: ModelArgs, name='EncoderLayer', **kwargs):
+        super(EncoderLayer, self).__init__(name=name, **kwargs)
 
         self.dim = args.dim
         self.dim_ff = args.dim_ff
-        self.dim_key = args.dim_head
-        self.num_heads = args.num_heads
         self.dropout_rate = args.dropout_rate
+        self.num_heads = args.num_heads
+        self.dim_key = args.dim_head
 
+        self.args = args
+
+    def build(self, input_shape):
         # Self-Attention
         self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
 
@@ -73,6 +95,8 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.dropout_mha = tf.keras.layers.Dropout(self.dropout_rate)
         self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate)
 
+        super(EncoderLayer, self).build(input_shape)
+
     def call(self, x, training=False):
         # Self-Attention
         attn_output = self.mha(x, x)
@@ -88,27 +112,28 @@ class EncoderLayer(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super(EncoderLayer, self).get_config()
-        mha_config = self.mha.get_config()
-        config.update({
-            'dim': self.ffn.layers[2].units, 
-            'dim_ff': self.ffn.layers[0].units, 
-            'num_heads': mha_config['num_heads'], 
-            'key_dim': mha_config['key_dim'], 
-            'dropout_rate': self.dropout_mha.rate
-        })
+        config.update({'args': self.args})
         return config
+
+    @classmethod
+    def from_config(cls, config):
+        args = config.pop('args')
+        return cls(args=args, **config)
 
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name='DecoderLayer'):
-        super(DecoderLayer, self).__init__(name=name)
+    def __init__(self, args: ModelArgs, name='DecoderLayer', **kwargs):
+        super(DecoderLayer, self).__init__(name=name, **kwargs)
         
         self.dim = args.dim
         self.dim_ff = args.dim_ff
         self.dropout_rate = args.dropout_rate
         self.num_heads = args.num_heads
-        self.dim_key = args.dim_head # head = key
+        self.dim_key = args.dim_head
 
+        self.args = args
+
+    def build(self, input_shape):
         # Self-Attention and Cross-Attention
         self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
         self.mha2 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key)
@@ -130,6 +155,8 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.dropout_cross_attn = tf.keras.layers.Dropout(self.dropout_rate)
         self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate)
 
+        super(DecoderLayer, self).build(input_shape)
+
     def call(self, x, enc_output, training=False, look_ahead_mask=None, padding_mask=None):
         # Self-Attention
         attn1_output = self.mha1(x, x, attention_mask=look_ahead_mask)
@@ -150,27 +177,42 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super(DecoderLayer, self).get_config()
-        mha_config = self.mha1.get_config()  # Assumes mha1 and mha2 have the same configuration
-        config.update({
-            'dim': self.ffn.layers[2].units,
-            'dim_ff': self.ffn.layers[0].units,
-            'num_heads': mha_config['num_heads'],
-            'key_dim': mha_config['key_dim'],
-            'dropout_rate': self.dropout_self_attn.rate
-        })
+        config.update({'args': self.args})
         return config
+    
+    @classmethod
+    def from_config(cls, config):
+        args = config.pop('args')
+        return cls(args=args, **config)
 
 
 class TransformerEncoder(tf.keras.layers.Layer):
-    def __init__(self, args, name='TransformerEncoder'):
+    def __init__(self, args: ModelArgs, name='TransformerEncoder'):
         super(TransformerEncoder, self).__init__(name=name)
         self.num_layers = args.num_layers
         self.enc_layers = [EncoderLayer(args, name=f'encoder_layer_{i}') for i in range(self.num_layers)]
+
+        self.args = args
+
+    def build(self, input_shape):
+        for layer in self.enc_layers:
+            layer.build(input_shape)
+        super(TransformerEncoder, self).build(input_shape)
 
     def call(self, x: tf.Tensor, training=False) -> tf.Tensor:
         for layer in self.enc_layers:
             x = layer(x, training=training)
         return x
+    
+    def get_config(self):
+        config = super(Transformer, self).get_config()
+        config.update({'args': self.args})
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        args = config.pop('args')
+        return cls(args=args)
 
 
 class TransformerDecoder(tf.keras.layers.Layer):
@@ -179,19 +221,38 @@ class TransformerDecoder(tf.keras.layers.Layer):
         self.num_layers = args.num_layers
         self.dec_layers = [DecoderLayer(args, name=f'decoder_layer_{i}') for i in range(self.num_layers)]
 
+        self.args = args
+
+    def build(self, input_shape):
+        for layer in self.dec_layers:
+            layer.build(input_shape)
+        super(TransformerDecoder, self).build(input_shape)
+
     def call(self, x: tf.Tensor, enc_output: tf.Tensor, training=False) -> tf.Tensor:
         for layer in self.dec_layers:
             x = layer(x, enc_output, training=training)
         return x
 
+    def get_config(self):
+        config = super(TransformerDecoder, self).get_config()
+        config.update({'args': self.args})
+        return config
+    
+    @classmethod
+    def from_config(cls, config):
+        args = config.pop('args')
+        return cls(args=args, **config)
+
 
 class Transformer(tf.keras.Model):
-    def __init__(self, args):
+    def __init__(self, args: ModelArgs):
         super(Transformer, self).__init__()
         
         self.dim = args.dim
         self.problem_vocab_size = args.problem_vocab_size
         self.solution_vocab_size = args.solution_vocab_size
+
+        self.args = args
 
         # Separate embedding for input and output
         self.problem_embedding_layer = tf.keras.layers.Embedding(self.problem_vocab_size, self.dim, mask_zero=True)
@@ -207,8 +268,8 @@ class Transformer(tf.keras.Model):
         (encoder_input, decoder_input), target = data
 
         # Check for NaNs
-        tf.debugging.check_numerics(encoder_input, "NaN in encoder_input")
-        tf.debugging.check_numerics(decoder_input, "NaN in decoder_input")
+        # tf.debugging.check_numerics(encoder_input, "NaN in encoder_input")
+        # tf.debugging.check_numerics(decoder_input, "NaN in decoder_input")
 
         with tf.GradientTape() as tape:
             predictions = self((encoder_input, decoder_input[:, :-1]), training=True)
@@ -249,6 +310,16 @@ class Transformer(tf.keras.Model):
         final_output = self.final_layer(decoder_output)
 
         return final_output
+    
+    def get_config(self):
+        config = super(Transformer, self).get_config()
+        config.update({'args': self.args.get_config()})
+        return config
+
+    @classmethod
+    def from_config(cls, config):
+        args = ModelArgs.from_config(config.pop('args'))
+        return cls(args=args)
 
 
 def build_and_compile(args: ModelArgs):
@@ -274,9 +345,3 @@ def build_and_compile(args: ModelArgs):
     )
 
     return model
-
-# Not needed anymore
-def calculate_loss(model_output, decoder_input, mask):
-    loss = tf.keras.losses.sparse_categorical_crossentropy(decoder_input, model_output, from_logits=True)
-    loss *= mask  # Apply mask
-    return tf.reduce_sum(loss) / tf.reduce_sum(mask)

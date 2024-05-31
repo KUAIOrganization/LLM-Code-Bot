@@ -1,16 +1,16 @@
+import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pickle
 import tensorflow as tf
-import tensorboard
 
-from Transformer import DatasetType, Loader, ModelArgs
+from Transformer import Transformer, EncoderLayer, DecoderLayer, TransformerEncoder, TransformerDecoder, ModelArgs
+
 
 class Evaluator:
     def __init__(self, model, problem_tokenizer, solution_tokenizer, log_dir):
         self.model = model
-        self.dataset = 
         self.problem_tokenizer = problem_tokenizer
         self.solution_tokenizer = solution_tokenizer
         self.writer = tf.summary.create_file_writer(log_dir)
@@ -70,8 +70,8 @@ class Evaluator:
                 plt.title(f'Word Prediction Probabilities for Token {token_index} in Sample {sample_idx+1}')
                 plt.show()
 
-    def generate_training_predictions(self, n_samples=1):
-        for (encoder_inputs, decoder_inputs), _ in self.dataset.take(1):
+    def generate_training_predictions(self, dataset, n_samples=1):
+        for (encoder_inputs, decoder_inputs), _ in dataset.take(1):
             encoder_inputs = encoder_inputs[:n_samples]
             decoder_inputs = decoder_inputs[:n_samples]
 
@@ -87,9 +87,9 @@ class Evaluator:
                 print("Predicted sequence:", predicted_sequences[i])
                 print("Predicted text:", predicted_text, "\n")
 
-    def generate_manual_predictions(self, input_text):
+    def generate_manual_predictions(self, input_text, max_length_input):
         input_seq = self.problem_tokenizer.texts_to_sequences([input_text])
-        input_padded = tf.keras.preprocessing.sequence.pad_sequences(input_seq, maxlen=self.max_length_input, padding='post')
+        input_padded = tf.keras.preprocessing.sequence.pad_sequences(input_seq, maxlen=max_length_input, padding='post')
 
         start_token_index = self.solution_tokenizer.word_index.get('[START]', 1)
         decoder_input = np.array([[start_token_index]])
@@ -113,46 +113,37 @@ class Evaluator:
         else:
             print(f"Unknown command: {command}")
 
-# Set the path to the directory where the model files are located
+
+# Load model and tokenizers
 base_dir = os.getenv('WORKSPACE_DIR', os.path.dirname(os.path.abspath(__file__)))
 model_dir = os.path.join(base_dir, "Transformer", "model_files")
 
-base_log_dir = os.path.join(base_dir, "logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
-fit_log_dir = os.path.join(base_log_dir, "fit")
-debug_log_dir = os.path.join(base_log_dir, "debug")
-
-dataset_choice = DatasetType.CODEFORCES_A # [All, CODEFORCES_A, PROBLEM_SOLUTION_V3]
-args = ModelArgs()
-
-# Load components
-model = tf.keras.models.load_model(f"{model_dir}/model.keras")
-
-loader = Loader(base_dir, dataset_choice, args, use_reduced_dataset = True)
+# Ensure to load the model with custom objects if necessary
+model = tf.keras.models.load_model(
+    f"{model_dir}/model.keras",
+    custom_objects={
+        'Transformer': Transformer,
+        'EncoderLayer': EncoderLayer,
+        'DecoderLayer': DecoderLayer,
+        'TransformerEncoder': TransformerEncoder,
+        'TransformerDecoder': TransformerDecoder,
+        'ModelArgs': ModelArgs
+    }
+)
 
 with open(f"{model_dir}/problem_tokenizer.pkl", 'rb') as f:
     problem_tokenizer = pickle.load(f)
 with open(f"{model_dir}/solution_tokenizer.pkl", 'rb') as f:
     solution_tokenizer = pickle.load(f)
 
+log_dir = os.path.join(base_dir, "logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
+
 # Create an instance of Evaluator
 evaluator = Evaluator(model, problem_tokenizer, solution_tokenizer, log_dir)
 
-
-#evaluator.evaluate('loss', history) # Get history in main.py to work first
-evaluator.evaluate('token_prob', token_index=10, n_samples=3)
-evaluator.evaluate('training_sample_pred', n_samples=3)
+# Example usage
+input_text = "Print the numbers 1-9"
+evaluator.evaluate('manual_sample_pred', input_text, max_length_input=50)
 
 input_text = "Print the numbers 1-9"
-evaluator.evaluate('manual_sample_pred', input_text)
-
-"""
-For printing during dataset creation:
-                if i%100 == 0:
-                    print(example.features.feature['problem'].int64_list.value[:15],
-                          example.features.feature['decoder_input'].int64_list.value[:15],
-                          example.features.feature['target'].int64_list.value[:15])
-                i += 1
-                
-For printing after raw -> parse:
-
-"""
+evaluator.evaluate('manual_sample_pred', input_text, max_length_input=50)

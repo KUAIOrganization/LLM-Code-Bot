@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import re
 
-from .dataset import Dataset, Codeforces_A, Problem_Solution, All # Import all datasets
+from .dataset import Dataset, Codeforces_A, LeetCode_Complete, Problem_Solution, All # Import all datasets
 from .tokenizer import Tokenizers
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
@@ -78,6 +78,36 @@ class Dataset_Generator:
         self.write_file(problems, solutions, solutions, Codeforces_A.raw_path)
         self.write_file(encoder_inputs, decoder_inputs, targets, Codeforces_A.tokenized_path)
 
+    def generate_LeetCode_Complete(self):
+        # Load problems
+        problems_path = os.path.join(self.base_dir, LeetCode_Complete.base_path, 'leetcodecomplete.jsonl')
+        with open(problems_path, 'r') as problems_file:
+            dataset_list = [json.loads(line) for line in problems_file]
+
+        problems = []
+        solutions = []
+        for idx, example in enumerate(dataset_list):
+            problems.append(example['input'])
+            # Remove ```python```
+            solution = re.sub(r'^```python\s*', '', example['output'].strip())
+            solution = re.sub(r'\s*```$', '', solution)
+            solutions.append(solution)
+
+        # Tokenize and pad
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+
+        try:
+            assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
+            assert all(len(decoder_inputs[0]) == len(seq) for seq in decoder_inputs), "Decoder inputs sequence lengths mismatch."
+            assert all(len(targets[0]) == len(seq) for seq in targets), "Targets sequence lengths mismatch."
+        except AssertionError as e:
+            print(f"Discrepancy found in LeetCode_Complete sequence lengths: {e}")
+
+        # Write to npz
+        self.write_file(problems, solutions, solutions, LeetCode_Complete.raw_path)
+        self.write_file(encoder_inputs, decoder_inputs, targets, LeetCode_Complete.tokenized_path)
+
     def generate_Problem_Solution(self):
         problems_path = os.path.join(self.base_dir, Problem_Solution.base_path, 'Problem_Solution.csv')
         df = pd.read_csv(problems_path, encoding_errors='ignore')
@@ -125,6 +155,7 @@ class Dataset_Generator:
         decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
         # Write to npz
+        self.write_file(encoder_inputs, decoder_inputs, targets, All.raw_path)
         self.write_file(encoder_inputs, decoder_inputs, targets, All.tokenized_path)
     
     def write_file(self, encoder_inputs, decoder_inputs, targets, output_file):
@@ -132,9 +163,9 @@ class Dataset_Generator:
         np.savez_compressed(output_file, encoder_inputs=encoder_inputs, decoder_inputs=decoder_inputs, targets=targets)
 
         # Convert to lists
-        encoder_inputs_list = [seq.tolist() for seq in encoder_inputs]
-        decoder_inputs_list = [seq.tolist() for seq in decoder_inputs]
-        targets_list = [seq.tolist() for seq in targets]
+        encoder_inputs_list = [seq.tolist() if isinstance(seq, np.ndarray) else seq for seq in encoder_inputs]
+        decoder_inputs_list = [seq.tolist() if isinstance(seq, np.ndarray) else seq for seq in decoder_inputs]
+        targets_list = [seq.tolist() if isinstance(seq, np.ndarray) else seq for seq in targets]
 
         data = {
             'encoder_inputs': encoder_inputs_list,
@@ -142,5 +173,5 @@ class Dataset_Generator:
             'targets': targets_list
         }
         df = pd.DataFrame(data)
-        excel_output_file = output_file.replace('.npz', '.xlsx')
-        df.to_excel(excel_output_file, index=False)
+        csv_output_file = output_file.replace('.npz', '.csv')
+        df.to_csv(csv_output_file, index=False)

@@ -5,10 +5,9 @@
 import datetime
 import os
 import pickle
-
 import tensorflow as tf
 
-from Transformer import ModelArgs, Dataset_Generator, build_and_compile, Codeforces_A, Problem_Solution, All
+from Transformer import ModelArgs, Dataset_Generator, build_and_compile, Codeforces_A, LeetCode_Complete, Problem_Solution, All
 
 
 def main():
@@ -32,8 +31,8 @@ def main():
 
     args = ModelArgs()
     
-    # Generate the dataset
-    dataset_choice = All # [All, Codeforces_A, Problem_Solution]
+    # Generate the datase 
+    dataset_choice = All # [All, Codeforces_A, LeetCode_Complete, Problem_Solution]
     
     if not os.path.exists(dataset_choice.tokenized_path):
         generator = Dataset_Generator(base_dir)
@@ -56,7 +55,7 @@ def main():
     # Build the model
     model = build_and_compile(args)
     
-    # Setup TensorBoard callback
+    # Setup TensorBoard call  back
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fit_log_dir, histogram_freq=1)
     
     # Train the model
