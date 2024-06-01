@@ -7,7 +7,8 @@ import os
 import pickle
 import tensorflow as tf
 
-from Transformer import ModelArgs, Dataset_Generator, build_and_compile, Codeforces_A, LeetCode_Complete, Problem_Solution, All
+from Transformer import ModelArgs, Dataset_Generator, build_and_compile
+from Transformer import Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution, All
 
 
 def main():
@@ -32,7 +33,7 @@ def main():
     args = ModelArgs()
     
     # Generate the datase 
-    dataset_choice = All # [All, Codeforces_A, LeetCode_Complete, Problem_Solution]
+    dataset_choice = All # [All, Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution]
     
     if not os.path.exists(dataset_choice.tokenized_path):
         generator = Dataset_Generator(base_dir)

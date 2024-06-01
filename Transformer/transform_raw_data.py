@@ -11,7 +11,7 @@ import numpy as np
 import pandas as pd
 import re
 
-from .dataset import Dataset, Codeforces_A, LeetCode_Complete, Problem_Solution, All # Import all datasets
+from .dataset import Dataset, Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution, All # Import all datasets
 from .tokenizer import Tokenizers
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 
@@ -107,6 +107,79 @@ class Dataset_Generator:
         # Write to npz
         self.write_file(problems, solutions, solutions, LeetCode_Complete.raw_path)
         self.write_file(encoder_inputs, decoder_inputs, targets, LeetCode_Complete.tokenized_path)
+
+    def generate_LeetCode_Master(self):
+        # Load problems
+        problems_dir = os.path.join(self.base_dir, LeetCode_Master.base_path, 'python_files')
+        problem_files = glob.glob(os.path.join(problems_dir, '*.py'))
+
+        problems = []
+        solutions = []
+        for problem_file in problem_files:
+            with open(problem_file, 'r', encoding='utf-8') as file:
+                content = file.read()
+                # Extract question and answer parts
+                match = re.search(r'"""(.*?)"""(.*)', content, re.DOTALL)
+                if match:
+                    question = match.group(1).strip()
+                    solution = match.group(2).strip()
+                    # Remove source, author, and date lines
+                    question = re.sub(r'(Source : .*|Author : .*|Date   : .*)', '', question)
+                    problems.append(question)
+                    solutions.append(solution)
+        self.write_file(problems, solutions, solutions, LeetCode_Master.raw_path)
+        # Tokenize and pad
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+
+        try:
+            assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
+            assert all(len(decoder_inputs[0]) == len(seq) for seq in decoder_inputs), "Decoder inputs sequence lengths mismatch."
+            assert all(len(targets[0]) == len(seq) for seq in targets), "Targets sequence lengths mismatch."
+        except AssertionError as e:
+            print(f"Discrepancy found in LeetCode_Master sequence lengths: {e}")
+
+        # Write to npz
+        self.write_file(problems, solutions, solutions, LeetCode_Master.raw_path)
+        self.write_file(encoder_inputs, decoder_inputs, targets, LeetCode_Master.tokenized_path)
+
+    def generate_LeetCode_Train(self):
+        # Load problems
+        problems_path = os.path.join(self.base_dir, LeetCode_Train.base_path, 'leetcode-train.jsonl')
+        with open(problems_path, 'r') as problems_file:
+            dataset_list = [json.loads(line) for line in problems_file]
+
+        problems = []
+        solutions = []
+
+        for idx, example in enumerate(dataset_list):
+            problem = f"XXTITLE {example['title']} XXCONTENT {example['content']}"
+
+            # Extract the Python code block
+            python_code_match = re.search(r'```python\s*(.*?)\s*```', example['python'], re.DOTALL)
+            if python_code_match:
+                solution = python_code_match.group(1)
+            else:
+                print(f"Warning: No Python code block found in example {example['id']}")
+                solution = example['python']
+
+            problems.append(problem)
+            solutions.append(solution)
+
+        # Tokenize and pad
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+
+        try:
+            assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
+            assert all(len(decoder_inputs[0]) == len(seq) for seq in decoder_inputs), "Decoder inputs sequence lengths mismatch."
+            assert all(len(targets[0]) == len(seq) for seq in targets), "Targets sequence lengths mismatch."
+        except AssertionError as e:
+            print(f"Discrepancy found in LeetCode_Train sequence lengths: {e}")
+
+        # Write to npz
+        self.write_file(problems, solutions, solutions, LeetCode_Train.raw_path)
+        self.write_file(encoder_inputs, decoder_inputs, targets, LeetCode_Train.tokenized_path)
 
     def generate_Problem_Solution(self):
         problems_path = os.path.join(self.base_dir, Problem_Solution.base_path, 'Problem_Solution.csv')

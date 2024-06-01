@@ -33,6 +33,8 @@ class Dataset:
     
 Codeforces_A = Dataset('Codeforces_A')
 LeetCode_Complete = Dataset('LeetCode_Complete')
+LeetCode_Master = Dataset('LeetCode_Master')
+LeetCode_Train = Dataset('LeetCode_Train')
 Problem_Solution = Dataset('Problem_Solution')
 
 All = Dataset('All')
