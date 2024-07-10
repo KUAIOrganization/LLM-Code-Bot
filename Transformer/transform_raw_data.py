@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# coding: utf-8
+# workspace/Transformer/transform_raw_data.py
 
 
 import datetime
@@ -13,7 +12,7 @@ import re
 
 from .dataset import Dataset, Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution, All # Import all datasets
 from .tokenizer import Tokenizers
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
 
 
 class Dataset_Generator:

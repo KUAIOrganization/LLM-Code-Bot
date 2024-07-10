@@ -1,5 +1,4 @@
-#!/usr/bin/env python
-# coding: utf-8
+# workspace/Transformer/tokenizer.py
 
 
 import io
@@ -7,15 +6,17 @@ import tokenize
 
 import pickle
 
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.preprocessing.text import Tokenizer # type: ignore
+from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
 
 
 class Tokenizers:
     def __init__(self):
         self.problem_tokenizer = Tokenizer(filters='', oov_token='UNK')
-        self.solution_tokenizer = Tokenizer(filters='', oov_token='UNK')
-        # Also I would say to pass the SOS and EOS tokens as parameters. Probably have them have default values of 'XXSOS' and 'XXEOS' -C.
+        self.solution_tokenizer = Tokenizer(filters='', oov_token='UNK', lower=False)
+
+        self.sos_token = '<SOS>'
+        self.eos_token = '<EOS>'
     
     def tokenize_input(self, problems):
         # Fit Keras tokenizer
@@ -40,13 +41,14 @@ class Tokenizers:
         targets = []
         for solution in solutions:
             tokens = []
-            for token in tokenize.generate_tokens(io.StringIO(solution).readline): # generate_tokens only takes readlines
+            for token in tokenize.generate_tokens(io.StringIO(solution).readline):
                 tokens.append(token.string)
-            decoder_inputs.append(['XXSOS'] + tokens)
-            targets.append(tokens + ['XXEOS'])
+            decoder_inputs.append([self.sos_token] + tokens)
+            targets.append(tokens + [self.eos_token])
         
         # Fit Keras tokenizer and tokenize
-        self.solution_tokenizer.fit_on_texts(decoder_inputs + [['XXEOS']]) # Both at once
+        self.solution_tokenizer.fit_on_texts([[self.sos_token, self.eos_token]] + decoder_inputs + targets)
+
         decoder_inputs = self.solution_tokenizer.texts_to_sequences(decoder_inputs)
         targets = self.solution_tokenizer.texts_to_sequences(targets)
 
