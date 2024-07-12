@@ -10,14 +10,14 @@ class Dataset:
 
     def __init__(self, name):
         self.name = name
-        self.base_path = os.path.join('Training_Data', self.name)
-        self.raw_path = os.path.join(self.base_path, 'raw_data.npz')
-        self.tokenized_path = os.path.join(self.base_path, 'tokenized_padded_data.npz')
+        self.base_dir = os.path.join('Training_Data', self.name)
+        self.raw_path = os.path.join(self.base_dir, 'raw_data.npz')
+        self.tokenized_path = os.path.join(self.base_dir, 'tokenized_padded_data.npz')
 
         Dataset.registry.append(self)
 
     def create_dataset(self, batch_size):
-        # Load the .npz file
+        # Load
         data = np.load(self.tokenized_path)
 
         encoder_inputs = data['encoder_inputs']

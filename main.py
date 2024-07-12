@@ -1,6 +1,5 @@
 # workspace/main.py
 
-
 import datetime
 import os
 import pickle
@@ -26,15 +25,12 @@ class FullWeightHistCallback(tf.keras.callbacks.Callback):
     
     def log_layer_histograms(self, layer, epoch):
         if hasattr(layer, 'layers'):
-            print(f"{layer.name} has layers {[sublayer.name for sublayer in layer.layers]}")
             for sublayer in layer.layers:
                 self.log_layer_histograms(sublayer, epoch)
         elif hasattr(layer, 'weights'):
             for weight in layer.weights:
                 if 'bias' not in weight.name or self.include_biases:
                     tf.summary.histogram(f"Weights/{layer.name}", weight, step=epoch)
-        else:
-            print(f"{layer.name} has NOTHING.  I repeat NOTHING")
 
     def on_epoch_end(self, epoch, logs=None):
         self.save_histograms(epoch)
@@ -118,11 +114,11 @@ def main():
     
     # Generate the dataset
     dataset_choice = All # [All, Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution]
-    
-    if not os.path.exists(dataset_choice.tokenized_path):
-        generator = Dataset_Generator(base_dir)
-        generate_function = generator.get_generate_function(dataset_choice)
-        generate_function()
+
+    # if not os.path.exists(dataset_choice.tokenized_path):
+    generator = Dataset_Generator(base_dir, dataset_choice.base_dir)
+    generate_function = generator.get_generate_function(dataset_choice)
+    generate_function()
 
     dataset = dataset_choice.create_dataset(args.batch_size)
     print("Dataset element_spec:", dataset.element_spec)
@@ -144,10 +140,21 @@ def main():
     else:
         print(f"Loaded new model to save at {model_path}")
         model = build_and_compile(args)
+    model.summary()
 
+    # Callbacks
     # tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fit_log_dir, histogram_freq=1, embeddings_freq=1)
+    # metadata_dir = os.path.join(dataset_choice.base_dir, 'metadata')
+    projector_dir = os.path.join(dataset_choice.base_dir, 'embeddings')
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(
+        log_dir=fit_log_dir, histogram_freq=1, embeddings_freq=1, 
+        embeddings_metadata={
+            'problem_embedding': os.path.join(projector_dir, 'problem_metadata.tsv'), 
+            'solution_embedding': os.path.join(projector_dir, 'solution_metadata.tsv')
+        }
+    )
     weight_callback = FullWeightHistCallback(save_freq=2, log_dir=fit_log_dir, include_biases=True)
-    sample_encoder_input = ["Write a for loop that prints 10 numbers."]
+    sample_encoder_input = ["Using python, write a for loop that prints 10 numbers."]
     sample_decoder_input = ["for i in range("]
     token_prob_callback = TokenProbabilityCallback(fit_log_dir, problem_tokenizer, solution_tokenizer, sample_encoder_input, sample_decoder_input)
     checkpoint_callback = ModelSaveCallback(save_freq=10, save_path=checkpoint_path)
@@ -156,7 +163,7 @@ def main():
     history = model.fit(
         dataset, 
         epochs=args.epochs, 
-        callbacks=[checkpoint_callback, weight_callback, token_prob_callback]) # history variable unused...
+        callbacks=[tensorboard_callback, checkpoint_callback, weight_callback, token_prob_callback])
     
     # Save the model
     model.save(model_path)

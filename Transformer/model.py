@@ -84,8 +84,9 @@ def positional_encoder(seq_length, dim):
 
 
 class EncoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name='EncoderLayer', **kwargs):
+    def __init__(self, args: ModelArgs, layer_index: int, name='EncoderLayer', **kwargs):
         super(EncoderLayer, self).__init__(name=name, **kwargs)
+        self.layer_index = layer_index
         self.args = args
 
         self.dim = args.dim
@@ -95,24 +96,31 @@ class EncoderLayer(tf.keras.layers.Layer):
         self.dim_key = args.dim_head
 
     def build(self, input_shape):
+        prefix = f'encoder{self.layer_index}'
+
         # Self-Attention
-        self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key, name='encoder_mha')
+        self.mha = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key, name=f'{prefix}_mha')
 
         # Feed-Forward
         self.ffn = tf.keras.Sequential([
-            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='encoder_ffn_dense1'), 
+            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name=f'{prefix}_ffn_dense1'), 
             tf.keras.layers.LeakyReLU(negative_slope=0.03), 
-            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='encoder_ffn_dense2')
-        ], name='encoder_ffn')
+            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name=f'{prefix}_ffn_dense2')
+        ], name=f'{prefix}_ffn')
 
         # Normalization
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='encoder_layernorm1')
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='encoder_layernorm2')
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name=f'{prefix}_layernorm1')
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name=f'{prefix}_layernorm2')
 
         # Dropout
-        self.dropout_mha = tf.keras.layers.Dropout(self.dropout_rate, name='encoder_dropout_mha')
-        self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate, name='encoder_dropout_ffn')
+        self.dropout_mha = tf.keras.layers.Dropout(self.dropout_rate, name=f'{prefix}_dropout_mha')
+        self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate, name=f'{prefix}_dropout_ffn')
 
+        self.layers = [
+            self.mha, self.ffn, 
+            self.layernorm1, self.layernorm2, 
+            self.dropout_mha, self.dropout_ffn
+        ]
         super(EncoderLayer, self).build(input_shape)
 
     def call(self, x, training=False):
@@ -130,18 +138,20 @@ class EncoderLayer(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super(EncoderLayer, self).get_config()
-        config.update({'args': self.args})
+        config.update({'layer_index': self.layer_index, 'args': self.args})
         return config
 
     @classmethod
     def from_config(cls, config):
+        layer_index = config.pop('layer_index')
         args = config.pop('args')
-        return cls(args=args, **config)
+        return cls(layer_index=layer_index, args=args, **config)
 
 
 class DecoderLayer(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name='DecoderLayer', **kwargs):
+    def __init__(self, args: ModelArgs, layer_index: int, name='DecoderLayer', **kwargs):
         super(DecoderLayer, self).__init__(name=name, **kwargs)
+        self.layer_index = layer_index
         self.args = args
         
         self.dim = args.dim
@@ -151,27 +161,34 @@ class DecoderLayer(tf.keras.layers.Layer):
         self.dim_key = args.dim_head
 
     def build(self, input_shape):
+        prefix = f'decoder{self.layer_index}'
+
         # Self-Attention and Cross-Attention
-        self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key, name='decoder_mha1')
-        self.mha2 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key, name='decoder_mha2')
+        self.mha1 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key, name=f'{prefix}_mha1')
+        self.mha2 = tf.keras.layers.MultiHeadAttention(num_heads=self.num_heads, key_dim=self.dim_key, name=f'{prefix}_mha2')
         
         # Feed-Forward
         self.ffn = tf.keras.Sequential([
-            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name='decoder_ffn_dense1'), 
+            tf.keras.layers.Dense(self.dim_ff, kernel_initializer='he_normal', name=f'{prefix}_ffn_dense1'), 
             tf.keras.layers.LeakyReLU(negative_slope=0.03), 
-            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name='decoder_ffn_dense2')
+            tf.keras.layers.Dense(self.dim, kernel_initializer='he_normal', name=f'{prefix}_ffn_dense2')
         ], name='decoder_ffn')
         
         # Normalization
-        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm1')
-        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm2')
-        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name='decoder_layernorm3')
+        self.layernorm1 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name=f'{prefix}_layernorm1')
+        self.layernorm2 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name=f'{prefix}_layernorm2')
+        self.layernorm3 = tf.keras.layers.LayerNormalization(epsilon=1e-6, name=f'{prefix}_layernorm3')
         
         # Dropout
-        self.dropout_self_attn = tf.keras.layers.Dropout(self.dropout_rate, name='decoder_dropout_self_attn')
-        self.dropout_cross_attn = tf.keras.layers.Dropout(self.dropout_rate, name='decoder_dropout_cross_attn')
-        self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate, name='decoder_dropout_ffn')
+        self.dropout_self_attn = tf.keras.layers.Dropout(self.dropout_rate, name=f'{prefix}_dropout_self_attn')
+        self.dropout_cross_attn = tf.keras.layers.Dropout(self.dropout_rate, name=f'{prefix}_dropout_cross_attn')
+        self.dropout_ffn = tf.keras.layers.Dropout(self.dropout_rate, name=f'{prefix}_dropout_ffn')
 
+        self.layers = [
+            self.mha1, self.mha2, self.ffn, 
+            self.layernorm1, self.layernorm2, self.layernorm3, 
+            self.dropout_self_attn, self.dropout_cross_attn, self.dropout_ffn
+        ]
         super(DecoderLayer, self).build(input_shape)
 
     def call(self, x, enc_output, training=False, look_ahead_mask=None, padding_mask=None):
@@ -194,21 +211,22 @@ class DecoderLayer(tf.keras.layers.Layer):
 
     def get_config(self):
         config = super(DecoderLayer, self).get_config()
-        config.update({'args': self.args})
+        config.update({'layer_index': self.layer_index, 'args': self.args})
         return config
     
     @classmethod
     def from_config(cls, config):
+        layer_index = config.pop('layer_index')
         args = config.pop('args')
-        return cls(args=args, **config)
+        return cls(layer_index=layer_index, args=args, **config)
 
 
 class TransformerEncoder(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name='TransformerEncoder'):
+    def __init__(self, args: ModelArgs, name='Encoder'):
         super(TransformerEncoder, self).__init__(name=name)
         self.args = args
         self.num_layers = args.num_layers
-        self.layers = [EncoderLayer(args, name=f'encoder_layer_{i}') for i in range(self.num_layers)]
+        self.layers = [EncoderLayer(args, layer_index=i, name=f'encoder_layer_{i}') for i in range(self.num_layers)]
 
     def build(self, input_shape):
         for layer in self.layers:
@@ -222,21 +240,22 @@ class TransformerEncoder(tf.keras.layers.Layer):
     
     def get_config(self):
         config = super(Transformer, self).get_config()
-        config.update({'args': self.args})
+        config.update({'layer_index': self.layer_index, 'args': self.args})
         return config
 
     @classmethod
     def from_config(cls, config):
+        layer_index = config.pop('layer_index')
         args = config.pop('args')
-        return cls(args=args)
+        return cls(layer_index=layer_index, args=args)
 
 
 class TransformerDecoder(tf.keras.layers.Layer):
-    def __init__(self, args: ModelArgs, name='TransformerDecoder'):
+    def __init__(self, args: ModelArgs, name='Decoder'):
         super(TransformerDecoder, self).__init__(name=name)
         self.args = args
         self.num_layers = args.num_layers
-        self.layers = [DecoderLayer(args, name=f'decoder_layer_{i}') for i in range(self.num_layers)]
+        self.layers = [DecoderLayer(args, layer_index=i, name=f'decoder_layer_{i}') for i in range(self.num_layers)]
 
     def build(self, input_shape):
         for layer in self.layers:
@@ -269,17 +288,21 @@ class Transformer(tf.keras.Model):
         self.solution_vocab_size = args.solution_vocab_size
 
         # Separate embedding for input and output
-        self.problem_embedding_layer = tf.keras.layers.Embedding(self.problem_vocab_size, self.dim, mask_zero=True, name="problem_embedding")
-        self.solution_embedding_layer = tf.keras.layers.Embedding(self.solution_vocab_size, self.dim, mask_zero=True, name="solution_embedding")
+        self.problem_embedding = tf.keras.layers.Embedding(
+            self.problem_vocab_size, self.dim, mask_zero=True, name="problem_embedding")
+        self.solution_embedding = tf.keras.layers.Embedding(
+            self.solution_vocab_size, self.dim, mask_zero=True, name="solution_embedding")
 
-        self.encoder = TransformerEncoder(args, name='encoder')
-        self.decoder = TransformerDecoder(args, name='decoder')
+        # Transformer blocks
+        self.encoder = TransformerEncoder(args, name='Encoder')
+        self.decoder = TransformerDecoder(args, name='Decoder')
 
+        # Output
         self.final_layer = tf.keras.layers.Dense(self.solution_vocab_size, name='output_layer')
 
     def build(self, input_shape):
-        self.problem_embedding_layer.build(input_shape[0])
-        self.solution_embedding_layer.build(input_shape[1])
+        self.problem_embedding.build(input_shape[0])
+        self.solution_embedding.build(input_shape[1])
         self.encoder.build(input_shape[0])
         self.decoder.build(input_shape[1])
         self.final_layer.build((input_shape[1][0], input_shape[1][1], self.dim))
@@ -289,30 +312,24 @@ class Transformer(tf.keras.Model):
     def train_step(self, data):
         (encoder_input, decoder_input), target = data
 
-        # Check for NaNs
-        # tf.debugging.check_numerics(encoder_input, "NaN in encoder_input")
-        # tf.debugging.check_numerics(decoder_input, "NaN in decoder_input")
-
         with tf.GradientTape() as tape:
             predictions = self((encoder_input, decoder_input[:, :-1]), training=True)
             
-            # Mask PAD tokens
             mask = tf.cast(tf.math.logical_not(tf.math.equal(decoder_input[:, :-1], 0)), dtype=predictions.dtype)
             loss = self.compiled_loss(target, predictions, sample_weight=mask)
 
-        # Compute and clip gradients
+        # Gradients
         gradients = tape.gradient(loss, self.trainable_variables)
         clipped_gradients, _ = tf.clip_by_global_norm(gradients, self.args.clip_norm)
 
-        # Apply gradients to update model weights
         self.optimizer.apply_gradients(zip(clipped_gradients, self.trainable_variables))
 
         return loss
 
     def call(self, encoder_input, decoder_input, training=False):
         # Embeddings
-        encoder_emb = self.problem_embedding_layer(encoder_input)
-        decoder_emb = self.solution_embedding_layer(decoder_input)
+        encoder_emb = self.problem_embedding(encoder_input)
+        decoder_emb = self.solution_embedding(decoder_input)
         
         # Positional encodings
         input_seq_length = tf.shape(encoder_input)[1]
@@ -343,19 +360,17 @@ class Transformer(tf.keras.Model):
 
 
 def build_and_compile(args: ModelArgs):
-    # Define model inputs
+    # Inputs
     encoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='encoder_input')
     decoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='decoder_input')
 
-    # Initialize and call the Transformer
+    # Transformer
     transformer = Transformer(args)
     transformer.build([(None, None), (None, None)]) # batch_size, len(encoder_input), batch_size, len(decoder_input)
     final_output = transformer(encoder_input, decoder_input)
 
-    # Create the model
-    model = tf.keras.Model(inputs=[encoder_input, decoder_input], outputs=final_output)
-
-    # Compile the model
+    # Model
+    model = tf.keras.Model(inputs=[encoder_input, decoder_input], outputs=final_output, name="Code_SLM")
     model.compile(
         optimizer = tf.keras.optimizers.Adam(learning_rate=NoamSchedule(args.dim)),
         loss=tf.keras.losses.SparseCategoricalCrossentropy(ignore_class=0, from_logits=True),

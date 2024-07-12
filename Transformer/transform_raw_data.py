@@ -1,33 +1,29 @@
 # workspace/Transformer/transform_raw_data.py
 
-
-import datetime
+import glob
 import json
 import os
-
-import glob
 import numpy as np
 import pandas as pd
 import re
-
-from .dataset import Dataset, Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution, All # Import all datasets
-from .tokenizer import Tokenizers
 from tensorflow.keras.preprocessing.sequence import pad_sequences # type: ignore
+
+from .dataset import Dataset, Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution, All
+from .tokenizer import Tokenizers
 
 
 class Dataset_Generator:
-    def __init__(self, base_dir: str):
+    def __init__(self, base_dir: str, choice_dir: str):
         self.base_dir = base_dir
-        self.generator_log_dir = os.path.join(self.base_dir, 'logs' + datetime.datetime.now().strftime('%m_%d_%H_%M'), 'generator')
 
-        self.tokenizer = Tokenizers()
+        self.tokenizer = Tokenizers(choice_dir)
     
     def get_generate_function(self, dataset):
         return getattr(self, 'generate_' + dataset.name)
 
     def generate_Codeforces_A(self):
         # Load problems
-        problems_path = os.path.join(self.base_dir, Codeforces_A.base_path, 'A_problems.json')
+        problems_path = os.path.join(self.base_dir, Codeforces_A.base_dir, 'A_problems.json')
         with open(problems_path, 'r') as problems_file:
             problems_list = json.load(problems_file)
 
@@ -44,8 +40,8 @@ class Dataset_Generator:
             raw_problems[problem_id] = concatenated_problem
 
         # Load solutions
-        submissions_dir = os.path.join(self.base_dir, Codeforces_A.base_path, 'A_submissions')
-        raw_solutions = [[] for _ in range(2000)] # Up to 2000 problem question indices | I would have this (2000) be a static variable at the top of the class -C.
+        submissions_dir = os.path.join(self.base_dir, Codeforces_A.base_dir, 'A_submissions')
+        raw_solutions = [[] for _ in range(1873)]
         submissions = glob.glob(os.path.join(submissions_dir, '*.py'))
 
         for submission_path in submissions:
@@ -63,15 +59,15 @@ class Dataset_Generator:
                     solutions.append(solution)
 
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
         
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
             assert all(len(decoder_inputs[0]) == len(seq) for seq in decoder_inputs), "Decoder inputs sequence lengths mismatch."
             assert all(len(targets[0]) == len(seq) for seq in targets), "Targets sequence lengths mismatch."
         except AssertionError as e:
-            print(f"Discrepancy found in CodeForces_A sequence lengths: {e}")
+            print(f"CodeForces_A sequence lengths don't match: {e}")
 
         # Write to npz
         self.write_file(problems, solutions, solutions, Codeforces_A.raw_path)
@@ -79,7 +75,7 @@ class Dataset_Generator:
 
     def generate_LeetCode_Complete(self):
         # Load problems
-        problems_path = os.path.join(self.base_dir, LeetCode_Complete.base_path, 'leetcodecomplete.jsonl')
+        problems_path = os.path.join(self.base_dir, LeetCode_Complete.base_dir, 'leetcodecomplete.jsonl')
         with open(problems_path, 'r') as problems_file:
             dataset_list = [json.loads(line) for line in problems_file]
 
@@ -93,8 +89,8 @@ class Dataset_Generator:
             solutions.append(solution)
 
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
 
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
@@ -109,7 +105,7 @@ class Dataset_Generator:
 
     def generate_LeetCode_Master(self):
         # Load problems
-        problems_dir = os.path.join(self.base_dir, LeetCode_Master.base_path, 'python_files')
+        problems_dir = os.path.join(self.base_dir, LeetCode_Master.base_dir, 'python_files')
         problem_files = glob.glob(os.path.join(problems_dir, '*.py'))
 
         problems = []
@@ -128,8 +124,8 @@ class Dataset_Generator:
                     solutions.append(solution)
         self.write_file(problems, solutions, solutions, LeetCode_Master.raw_path)
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
 
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
@@ -144,7 +140,7 @@ class Dataset_Generator:
 
     def generate_LeetCode_Train(self):
         # Load problems
-        problems_path = os.path.join(self.base_dir, LeetCode_Train.base_path, 'leetcode-train.jsonl')
+        problems_path = os.path.join(self.base_dir, LeetCode_Train.base_dir, 'leetcode-train.jsonl')
         with open(problems_path, 'r') as problems_file:
             dataset_list = [json.loads(line) for line in problems_file]
 
@@ -166,8 +162,8 @@ class Dataset_Generator:
             solutions.append(solution)
 
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
+        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
 
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
@@ -181,7 +177,7 @@ class Dataset_Generator:
         self.write_file(encoder_inputs, decoder_inputs, targets, LeetCode_Train.tokenized_path)
 
     def generate_Problem_Solution(self):
-        problems_path = os.path.join(self.base_dir, Problem_Solution.base_path, 'Problem_Solution.csv')
+        problems_path = os.path.join(self.base_dir, Problem_Solution.base_dir, 'Problem_Solution.csv')
         df = pd.read_csv(problems_path, encoding_errors='ignore')
 
         problems = []

@@ -167,3 +167,4 @@ Transformer/model_files
 .devcontainer/cudnn-local-repo-ubuntu2204-8.9.7.29_1.0-1_amd64.deb
 /.devcontainer/old_versions
 *.png
+*.pkl
