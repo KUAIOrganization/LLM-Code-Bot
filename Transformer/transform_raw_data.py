@@ -59,8 +59,8 @@ class Dataset_Generator:
                     solutions.append(solution)
 
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
         
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
@@ -89,8 +89,8 @@ class Dataset_Generator:
             solutions.append(solution)
 
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
@@ -124,8 +124,8 @@ class Dataset_Generator:
                     solutions.append(solution)
         self.write_file(problems, solutions, solutions, LeetCode_Master.raw_path)
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."
@@ -162,8 +162,8 @@ class Dataset_Generator:
             solutions.append(solution)
 
         # Tokenize and pad
-        encoder_inputs = self.tokenizer.tokenize_input(problems, self.projector_log_dir)
-        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions, self.projector_log_dir)
+        encoder_inputs = self.tokenizer.tokenize_input(problems)
+        decoder_inputs, targets = self.tokenizer.tokenize_output(solutions)
 
         try:
             assert all(len(encoder_inputs[0]) == len(seq) for seq in encoder_inputs), "Problems sequence lengths mismatch."

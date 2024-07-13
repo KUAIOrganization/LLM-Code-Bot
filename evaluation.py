@@ -8,7 +8,7 @@ import pandas as pd
 import pickle
 import tensorflow as tf
 
-from Transformer import Transformer, EncoderLayer, DecoderLayer, TransformerEncoder, TransformerDecoder, ModelArgs
+from Transformer import Transformer, EncoderBlock, DecoderBlock
 
 
 class Evaluator:
@@ -19,7 +19,7 @@ class Evaluator:
         self.solution_tokenizer = solution_tokenizer
         self.writer = tf.summary.create_file_writer(log_dir)
 
-    def load_and_print_dataset_tokens(self, num_samples=10):
+    def get_dataset(self, num_samples=10):
         # Load
         df = pd.read_csv(self.dataset_path)
         encoder_inputs = df['encoder_inputs'].apply(eval).tolist()
@@ -47,7 +47,7 @@ class Evaluator:
     def _log_dataset_samples(self, problems, decoder_inputs, targets):
         with self.writer.as_default():
             for i, (problem, decoder_inputs, target) in enumerate(zip(problems, decoder_inputs, targets)):
-                if i >= 5:  # Log 5 samples
+                if i >= 5: # Log 5 samples
                     break
                 
                 problem_text = self.problem_tokenizer.sequences_to_texts([problem.numpy()])
@@ -70,51 +70,30 @@ class Evaluator:
         plt.savefig(f'loss.png')
         plt.close()
 
-    def plot_token_probabilities(self, token_index, n_samples=1):
-        dataset = self.load_and_print_dataset_tokens(num_samples=n_samples)
-        for (encoder_inputs, decoder_inputs) in dataset.take(n_samples):
-            encoder_inputs = tf.reshape(encoder_inputs, (1, -1))
-            decoder_inputs = tf.reshape(decoder_inputs, (1, -1))
-
-            predictions = self.model.predict([encoder_inputs, decoder_inputs])
-
-            for sample_idx in range(n_samples):
-                token_logits = predictions[sample_idx, token_index, :]
-                token_probabilities = tf.nn.softmax(token_logits).numpy()
-                sorted_indices = np.argsort(token_probabilities)[::-1]
-                sorted_probabilities = token_probabilities[sorted_indices]
-
-                plt.figure(figsize=(20, 5))
-                plt.bar(range(len(sorted_probabilities)), sorted_probabilities)
-                plt.xlabel('Word Indices (sorted by probability)')
-                plt.ylabel('Probability')
-                plt.title(f'Word Prediction Probabilities for Token {token_index} in Sample {sample_idx+1}')
-                plt.savefig(f'token_probabilities_{token_index}.png')
-                plt.close()
-
     def inference_training_data(self, n_samples=1):
-        dataset = self.load_and_print_dataset_tokens(num_samples=n_samples)
+        dataset = self.get_dataset(num_samples=n_samples)
         for (encoder_inputs, decoder_inputs) in dataset.take(n_samples):
-            encoder_inputs = encoder_inputs[:n_samples]
-            decoder_inputs = decoder_inputs[:n_samples]
+            encoder_inputs = np.expand_dims(encoder_inputs, axis=0)
+            decoder_inputs = np.expand_dims(decoder_inputs, axis=0)
 
-            predictions = self.model.predict([encoder_inputs, decoder_inputs])
+            predictions = self.model.predict((encoder_inputs, decoder_inputs))
             predicted_sequences = np.argmax(predictions, axis=-1)
 
-            input_texts = self.problem_tokenizer.sequences_to_texts(encoder_inputs.numpy())
+            input_texts = self.problem_tokenizer.sequences_to_texts(encoder_inputs.tolist())
             predicted_texts = self.solution_tokenizer.sequences_to_texts(predicted_sequences)
 
             for i, predicted_text in enumerate(predicted_texts):
                 print(f"Sample {i + 1}:")
-                print("Input sequence [:250]:", input_texts[i][:250])
-                print("Predicted sequence:", predicted_sequences[i])
-                print("Predicted text:", predicted_text, "\n")
+                print("Input sequence [:50]:", input_texts[i][:50])
+                print("Predicted sequence:", predicted_sequences[i][:50])
+                print("Predicted text:", predicted_text[:50], "\n")
 
     def inference(self, input_text, max_length_input):
         input_seq = self.problem_tokenizer.texts_to_sequences([input_text])
+        print("input seq:", input_seq)
         input_padded = tf.keras.preprocessing.sequence.pad_sequences(input_seq, maxlen=max_length_input, padding='post')
 
-        start_token_index = self.solution_tokenizer.word_index.get('[START]', 1)
+        start_token_index = self.solution_tokenizer.word_index.get('<SOS>', 1)
         decoder_inputs = np.array([[start_token_index]])
 
         predictions = self.model.predict([input_padded, decoder_inputs])
@@ -125,48 +104,43 @@ class Evaluator:
         print(predicted_text)
         print("Predicted text:", predicted_text[0])
 
-    def evaluate(self, command, *args, **kwargs):
-        if command == 'loss':
-            self.plot_loss(*args, **kwargs)
-        elif command == 'token_prob':
-            self.plot_token_probabilities(*args, **kwargs)
-        elif command == 'training_sample_pred':
-            self.inference_training_data(*args, **kwargs)
-        elif command == 'manual_sample_pred':
-            self.inference(*args, **kwargs)
-        else:
-            print(f"Unknown command: {command}")
-
 
 # Load model and tokenizers
 base_dir = os.getenv('WORKSPACE_DIR', os.path.dirname(os.path.abspath(__file__)))
 model_dir = os.path.join(base_dir, "Transformer", "model_files")
-dataset_path = os.path.join(base_dir, "Training_Data", "All", "tokenized_padded_data.csv")
+dataset_dir = os.path.join(base_dir, 'Training_Data', 'All')
+dataset_path = os.path.join(dataset_dir, "tokenized_padded_data.csv")
+problem_tokenizer_path = os.path.join(dataset_dir, 'problem_tokenizer.pkl')
+solution_tokenizer_path = os.path.join(dataset_dir, 'solution_tokenizer.pkl')
+log_dir = os.path.join(base_dir, "logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
 
 model = tf.keras.models.load_model(
-    f"{model_dir}/model.keras",
+    f"{model_dir}/checkpoint.keras",
     custom_objects={
-        'Transformer': Transformer,
-        'EncoderLayer': EncoderLayer,
-        'DecoderLayer': DecoderLayer,
-        'TransformerEncoder': TransformerEncoder,
-        'TransformerDecoder': TransformerDecoder,
-        'ModelArgs': ModelArgs
+        'EncoderBlock': EncoderBlock,
+        'DecoderBlock': DecoderBlock, 
+        'Transformer': Transformer
     }
 )
 
-with open(f"{model_dir}/problem_tokenizer.pkl", 'rb') as f:
+with open(problem_tokenizer_path, 'rb') as f:
     problem_tokenizer = pickle.load(f)
-with open(f"{model_dir}/solution_tokenizer.pkl", 'rb') as f:
+with open(solution_tokenizer_path, 'rb') as f:
     solution_tokenizer = pickle.load(f)
-
-log_dir = os.path.join(base_dir, "logs", "run_" + datetime.datetime.now().strftime("%m_%d_%H_%M"))
 
 # Call this evaluator instance
 evaluator = Evaluator(model, dataset_path, problem_tokenizer, solution_tokenizer, log_dir)
 
-# From training data
-# input_text = "Write a NumPy program to repeat elements of an array. "
-# evaluator.evaluate('inference', input_text, max_length_input=50)
+# Dataset overfit prediction
+evaluator.inference_training_data(n_samples=2)
 
-evaluator.evaluate('token_prob', 1)
+# Manual prediction
+input_text = "Write a NumPy program to repeat elements of an array. "
+evaluator.inference(input_text, max_length_input=50)
+
+# def print_model_layers(object):
+#     if hasattr(object, 'layers'):
+#         print(f"{object.name} has sublayers {[layer.name for layer in object.layers]}")
+#         for layer in object.layers:
+#             print_model_layers(layer)
+# print_model_layers(model)

@@ -13,8 +13,8 @@ class Tokenizers:
     def __init__(self, base_dir):
         # For saving in pickles
         self.base_dir = base_dir
-        self.problem_tokenizer_dir = os.path.join(base_dir, 'problem_tokenizer.pkl')
-        self.solution_tokenizer_dir = os.path.join(base_dir, 'solution_tokenizer.pkl')
+        self.problem_tokenizer_path = os.path.join(base_dir, 'problem_tokenizer.pkl')
+        self.solution_tokenizer_path = os.path.join(base_dir, 'solution_tokenizer.pkl')
 
         # For saving metadata for embedding projection
         metadata_dir = os.path.join(base_dir, 'metadata')
@@ -30,7 +30,6 @@ class Tokenizers:
         self.eos_token = '<EOS>'
 
     def save_metadata(self, tokenizer, metadata_path):
-        print("metadata path:", metadata_path)
         with open(metadata_path, 'w') as f:
             for word, index in tokenizer.word_index.items():
                 f.write(f'{word}\n')
@@ -40,9 +39,8 @@ class Tokenizers:
         self.problem_tokenizer.fit_on_texts(problems)
 
         # Save tokenizer
-        with open(self.problem_tokenizer_dir, 'wb') as f:
+        with open(self.problem_tokenizer_path, 'wb') as f:
             pickle.dump(self.problem_tokenizer, f)
-
         self.save_metadata(self.problem_tokenizer, self.problem_metadata_path)
 
         # Tokenize with Keras tokenizer
@@ -69,9 +67,8 @@ class Tokenizers:
         self.solution_tokenizer.fit_on_texts([[self.sos_token, self.eos_token]] + decoder_inputs + targets)
 
         # Save tokenizer
-        with open(self.solution_tokenizer_dir, 'wb') as f:
+        with open(self.solution_tokenizer_path, 'wb') as f:
             pickle.dump(self.solution_tokenizer, f)
-
         self.save_metadata(self.solution_tokenizer, self.solution_metadata_path)
 
         # Tokenize with Keras tokenizer

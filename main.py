@@ -5,11 +5,16 @@ import os
 import pickle
 import tensorflow as tf
 
-from Transformer import ModelArgs, Dataset_Generator, build_and_compile
-from Transformer import Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution, All
+from Transformer import (
+    Dataset_Generator, ModelArgs, 
+    Transformer, EncoderBlock, DecoderBlock, EncoderLayer, DecoderLayer, NoamSchedule, 
+    Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution, All
+)
 
 
 class FullWeightHistCallback(tf.keras.callbacks.Callback):
+    """Callback to save histograms of every trainable model weight"""
+
     def __init__(self, save_freq, log_dir, include_biases):
         super(FullWeightHistCallback, self).__init__()
         self.file_writer = tf.summary.create_file_writer(log_dir)
@@ -35,14 +40,18 @@ class FullWeightHistCallback(tf.keras.callbacks.Callback):
     def on_epoch_end(self, epoch, logs=None):
         self.save_histograms(epoch)
 
+
 class TokenProbabilityCallback(tf.keras.callbacks.Callback):
-    def __init__(self, log_dir, problem_tokenizer, solution_tokenizer, sample_encoder_input, sample_decoder_input):
+    """Callback to test quality of specific outputs and health of probability distribution"""
+
+    def __init__(self, save_freq, log_dir, problem_tokenizer, solution_tokenizer, sample_encoder_input, sample_decoder_input):
         super().__init__()
+        self.save_freq = save_freq
         self.file_writer = tf.summary.create_file_writer(log_dir)
         self.problem_tokenizer = problem_tokenizer
         self.solution_tokenizer = solution_tokenizer
 
-        self.sample_encoder_input = self.preprocess_string(sample_decoder_input)
+        self.sample_encoder_input = self.preprocess_string(sample_encoder_input)
         self.sample_decoder_input = self.preprocess_string(sample_decoder_input)
 
         self.example_word_1 = "10"
@@ -61,19 +70,23 @@ class TokenProbabilityCallback(tf.keras.callbacks.Callback):
         return index
 
     def on_epoch_end(self, epoch, logs=None):
-        predictions = self.model.predict([self.sample_encoder_input, self.sample_decoder_input])
-        token_probs = tf.nn.softmax(predictions, axis=-1)
-        with self.file_writer.as_default():
-            filtered_probs = tf.boolean_mask(token_probs, token_probs > 0.01) # Trim down
-            tf.summary.histogram(f"token_probabilities", filtered_probs, step=epoch)
-            
-            token_prob = tf.reduce_mean(token_probs[:, :, self.example_index_1])
-            tf.summary.scalar(f"token_probabilities/{self.example_word_1}", token_prob, step=epoch)
+        if (epoch+1)%self.save_freq == 0:
+            predictions = self.model.predict((self.sample_encoder_input, self.sample_decoder_input))
+            token_probs = tf.nn.softmax(predictions, axis=-1)
+            with self.file_writer.as_default():
+                filtered_probs = tf.boolean_mask(token_probs, token_probs > 0.01) # Trim down
+                tf.summary.histogram(f"token_probabilities", filtered_probs, step=epoch)
+                
+                token_prob = tf.reduce_mean(token_probs[:, :, self.example_index_1])
+                tf.summary.scalar(f"token_probabilities/{self.example_word_1}", token_prob, step=epoch)
 
-            token_prob = tf.reduce_mean(token_probs[:, :, self.example_index_2])
-            tf.summary.scalar(f"token_probabilities/{self.example_word_2}", token_prob, step=epoch)
+                token_prob = tf.reduce_mean(token_probs[:, :, self.example_index_2])
+                tf.summary.scalar(f"token_probabilities/{self.example_word_2}", token_prob, step=epoch)
+
 
 class ModelSaveCallback(tf.keras.callbacks.Callback):
+    """Callback to save the model to a checkpoint"""
+
     def __init__(self, save_freq, save_path):
         super(ModelSaveCallback, self).__init__()
         self.save_freq = save_freq
@@ -84,7 +97,9 @@ class ModelSaveCallback(tf.keras.callbacks.Callback):
             self.model.save(self.save_path)
             print(f"\nSaved model checkpoint for epoch {epoch+1}")
 
+
 def set_gpu_config():
+    """Ensure GPU is available and enable memory growth"""
     gpus = tf.config.list_physical_devices('GPU')
     if gpus:
         try:
@@ -92,11 +107,81 @@ def set_gpu_config():
                 tf.config.experimental.set_memory_growth(gpu, True)
             tf.config.set_visible_devices(gpus[0], 'GPU')
             print(f"Using GPU: {gpus[0]}")
-        except RuntimeError as e:
-            print(e)
+        except RuntimeError as error:
+            print(error)
+    else:
+        print("No GPU found")
+        input("Press enter to continue without GPU")
+
+
+def print_model_layers(object):
+    """Recursively print the model structure"""
+    if hasattr(object, 'layers'):
+        print(f"{object.name} has sublayers {[layer.name for layer in object.layers]}")
+        for layer in object.layers:
+            print_model_layers(layer)
+
+
+def set_hyperparameters():
+    """Set and return model hyperparameters"""
+    args = ModelArgs()
+    return args
+
+
+def generate_dataset(base_dir, dataset_choice, args):
+    """Generate the chosen dataset with args.batch_size"""
+    generator = Dataset_Generator(base_dir, dataset_choice.base_dir)
+    generate_function = generator.get_generate_function(dataset_choice)
+    generate_function()
+    dataset = dataset_choice.create_dataset(args.batch_size)
+
+    print("Dataset element_spec:", dataset.element_spec)
+    return generator, dataset
+
+
+def load_tokenizers(generator, args):
+    """Load tokenizers and update args vocabulary sizes"""
+    with open(generator.tokenizer.problem_tokenizer_path, 'rb') as f:
+        problem_tokenizer = pickle.load(f)
+        args.problem_vocab_size = len(problem_tokenizer.word_index) + 1
+
+    with open(generator.tokenizer.solution_tokenizer_path, 'rb') as f:
+        solution_tokenizer = pickle.load(f)
+        args.solution_vocab_size = len(solution_tokenizer.word_index) + 1
+
+    return problem_tokenizer, solution_tokenizer
+
+
+def build_model(model_path, checkpoint_path, args, from_checkpoint):
+    """Build or load the model based on the from_checkpoint flag"""
+    if from_checkpoint:
+        model = tf.keras.models.load_model(
+            checkpoint_path, 
+            custom_objects={
+                'Transformer': Transformer, 
+                'EncoderBlock': EncoderBlock,
+                'DecoderBlock': DecoderBlock, 
+                'EncoderLayer': EncoderLayer, 
+                'DecoderLayer': DecoderLayer, 
+                'NoamSchedule': NoamSchedule
+            }
+        )
+        print(f"Loaded model from checkpoint {checkpoint_path}")
+    else:
+        encoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='encoder_input')
+        decoder_input = tf.keras.Input(shape=(None,), dtype='int32', name='decoder_input')
+
+        model = Transformer(args)
+        model((encoder_input, decoder_input))
+        print(f"Loaded new model to save at {model_path}")
+
+    model.compile()
+    return model
+
 
 def main():
-    set_gpu_config()
+    """Main function to set up, train, and save the model"""
+    set_gpu_config() # Ensure GPU is enabled with memory growth
 
     # Set paths
     base_dir = os.getenv('WORKSPACE_DIR', os.path.dirname(os.path.abspath(__file__)))
@@ -108,42 +193,22 @@ def main():
     time = (datetime.datetime.now() - datetime.timedelta(hours=5)).strftime("%m%d_%H%M")
     base_log_dir = os.path.join(base_dir, 'logs', 'run_' + time)
     fit_log_dir = os.path.join(base_log_dir, 'fit')
-
-    # Set hyperparameters
-    args = ModelArgs()
     
     # Generate the dataset
+    args = set_hyperparameters()
     dataset_choice = All # [All, Codeforces_A, LeetCode_Complete, LeetCode_Master, LeetCode_Train, Problem_Solution]
-
-    # if not os.path.exists(dataset_choice.tokenized_path):
-    generator = Dataset_Generator(base_dir, dataset_choice.base_dir)
-    generate_function = generator.get_generate_function(dataset_choice)
-    generate_function()
-
-    dataset = dataset_choice.create_dataset(args.batch_size)
-    print("Dataset element_spec:", dataset.element_spec)
+    generator, dataset = generate_dataset(base_dir, dataset_choice, args)
 
     # Load tokenizers
-    with open('Transformer/model_files/problem_tokenizer.pkl', 'rb') as f:
-        problem_tokenizer = pickle.load(f)
-        args.problem_vocab_size = len(problem_tokenizer.word_index) + 1
-
-    with open('Transformer/model_files/solution_tokenizer.pkl', 'rb') as f:
-        solution_tokenizer = pickle.load(f)
-        args.solution_vocab_size = len(solution_tokenizer.word_index) + 1
+    problem_tokenizer, solution_tokenizer = load_tokenizers(generator, args)
 
     # Build the model
-    from_checkpoint = False # True, False
-    if from_checkpoint:
-        print(f"Loaded model from checkpoint {checkpoint_path}")
-        model = tf.keras.models.load_model(checkpoint_path)
-    else:
-        print(f"Loaded new model to save at {model_path}")
-        model = build_and_compile(args)
-    model.summary()
+    model = build_model(model_path, checkpoint_path, args, from_checkpoint=False)
+    # model.summary()
+    # print_model_layers(model)
+    # exit()
 
     # Callbacks
-    # tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=fit_log_dir, histogram_freq=1, embeddings_freq=1)
     # metadata_dir = os.path.join(dataset_choice.base_dir, 'metadata')
     projector_dir = os.path.join(dataset_choice.base_dir, 'embeddings')
     tensorboard_callback = tf.keras.callbacks.TensorBoard(
@@ -153,17 +218,18 @@ def main():
             'solution_embedding': os.path.join(projector_dir, 'solution_metadata.tsv')
         }
     )
-    weight_callback = FullWeightHistCallback(save_freq=2, log_dir=fit_log_dir, include_biases=True)
+    weight_callback = FullWeightHistCallback(save_freq=3, log_dir=fit_log_dir, include_biases=True)
     sample_encoder_input = ["Using python, write a for loop that prints 10 numbers."]
     sample_decoder_input = ["for i in range("]
-    token_prob_callback = TokenProbabilityCallback(fit_log_dir, problem_tokenizer, solution_tokenizer, sample_encoder_input, sample_decoder_input)
+    token_prob_callback = TokenProbabilityCallback(5, fit_log_dir, problem_tokenizer, solution_tokenizer, sample_encoder_input, sample_decoder_input)
     checkpoint_callback = ModelSaveCallback(save_freq=10, save_path=checkpoint_path)
     
     # Train the model
     history = model.fit(
         dataset, 
         epochs=args.epochs, 
-        callbacks=[tensorboard_callback, checkpoint_callback, weight_callback, token_prob_callback])
+        callbacks=[checkpoint_callback, weight_callback, token_prob_callback, tensorboard_callback]
+    )
     
     # Save the model
     model.save(model_path)
@@ -171,17 +237,8 @@ def main():
 if __name__ == '__main__':
     main()
 
-    # Clears logs folder
-    #!find logs -mindepth 1 -delete
-
-    #tf.debugging.experimental.disable_dump_debug_info()
-
-    #!kill 415
-
     # print("Get build info", tf.sysconfig.get_build_info())
-
     # print("tf version:", tf.__version__)
-
     # print("cudnn version:", tf.sysconfig.get_build_info()["cudnn_version"])
     # print("cuda version:", tf.sysconfig.get_build_info()["cuda_version"])
     # print("Num GPUs Available: ", tf.config.list_physical_devices())
